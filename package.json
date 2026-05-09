@@ -1,0 +1,25 @@
+{
+  "name": "@everybook/core",
+  "version": "0.1.0",
+  "description": "Core renderer for the EveryBook interactive book format.",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "dompurify": "^3.0.0",
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}
