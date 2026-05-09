@@ -1,4 +1,5 @@
 import type {
+  EveryBookEntry,
   EveryBookPosition,
   EveryBookStory,
   EveryBookStoryState,
@@ -17,9 +18,12 @@ export class StoryState {
       },
       choices: [],
       visitedPages: [],
+      unlockedPages: [],
+      usedDefaultStoryline: false,
     };
 
     this.markVisited(start);
+    this.unlockPage(start);
   }
 
   getState(): EveryBookStoryState {
@@ -27,12 +31,13 @@ export class StoryState {
   }
 
   getCurrentPosition(): EveryBookPosition {
-    return this.state.current;
+    return structuredClone(this.state.current);
   }
 
   setCurrentPosition(position: EveryBookPosition): void {
-    this.state.current = position;
+    this.state.current = structuredClone(position);
     this.markVisited(position);
+    this.unlockPage(position);
   }
 
   getVariable<T = unknown>(key: string): T | undefined {
@@ -45,39 +50,97 @@ export class StoryState {
 
   incrementVariable(key: string, value: number): void {
     const current = Number(this.state.variables[key] ?? 0);
+
+    if (Number.isNaN(current)) {
+      this.state.variables[key] = value;
+      return;
+    }
+
     this.state.variables[key] = current + value;
   }
 
-  rememberChoice(choiceId: string): void {
-    const current = this.state.current;
+  rememberChoice(
+    choiceId: string,
+    position?: {
+      chapterId: string;
+      pageId: string;
+    }
+  ): void {
+    const source = position ?? this.state.current;
 
     const rememberedChoice: RememberedChoice = {
       choiceId,
-      chapterId: current.chapterId,
-      pageId: current.pageId,
+      chapterId: source.chapterId,
+      pageId: source.pageId,
       timestamp: new Date().toISOString(),
     };
 
-    this.state.choices.push(rememberedChoice);
+    const alreadyRemembered = this.state.choices.some(
+      (choice) =>
+        choice.choiceId === rememberedChoice.choiceId &&
+        choice.chapterId === rememberedChoice.chapterId &&
+        choice.pageId === rememberedChoice.pageId
+    );
+
+    if (!alreadyRemembered) {
+      this.state.choices.push(rememberedChoice);
+    }
   }
 
   hasChoice(choiceId: string): boolean {
     return this.state.choices.some((choice) => choice.choiceId === choiceId);
   }
 
-  hasVisited(chapterId: string, pageId: string): boolean {
-    return this.state.visitedPages.includes(`${chapterId}/${pageId}`);
+  hasVisited(entry: EveryBookEntry): boolean {
+    return this.state.visitedPages.includes(this.entryKey(entry));
   }
 
-  private markVisited(position: EveryBookPosition): void {
-    const key = `${position.chapterId}/${position.pageId}`;
+  markVisited(entry: EveryBookEntry): void {
+    const key = this.entryKey(entry);
 
     if (!this.state.visitedPages.includes(key)) {
       this.state.visitedPages.push(key);
     }
   }
 
+  isUnlocked(entry: EveryBookEntry): boolean {
+    const key = this.entryKey(entry);
+
+    return this.state.unlockedPages?.includes(key) ?? false;
+  }
+
+  unlockPage(entry: EveryBookEntry): void {
+    const key = this.entryKey(entry);
+
+    if (!this.state.unlockedPages) {
+      this.state.unlockedPages = [];
+    }
+
+    if (!this.state.unlockedPages.includes(key)) {
+      this.state.unlockedPages.push(key);
+    }
+  }
+
+  markUsedDefaultStoryline(): void {
+    this.state.usedDefaultStoryline = true;
+  }
+
   restore(state: EveryBookStoryState): void {
-    this.state = structuredClone(state);
+    this.state = {
+      bookId: state.bookId,
+      current: structuredClone(state.current),
+      variables: structuredClone(state.variables ?? {}),
+      choices: structuredClone(state.choices ?? []),
+      visitedPages: structuredClone(state.visitedPages ?? []),
+      unlockedPages: structuredClone(state.unlockedPages ?? []),
+      usedDefaultStoryline: state.usedDefaultStoryline ?? false,
+    };
+
+    this.markVisited(this.state.current);
+    this.unlockPage(this.state.current);
+  }
+
+  private entryKey(entry: EveryBookEntry): string {
+    return `${entry.chapterId}:${entry.pageId}`;
   }
 }

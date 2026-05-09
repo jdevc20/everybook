@@ -7,7 +7,6 @@
     "declaration": true,
     "declarationMap": true,
     "emitDeclarationOnly": false,
-    "outDir": "dist",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,

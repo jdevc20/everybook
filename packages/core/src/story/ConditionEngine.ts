@@ -9,16 +9,43 @@ export class ConditionEngine {
 
     const normalized = condition.trim();
 
-    const match = normalized.match(
+    /**
+     * Supports:
+     * hasKey
+     * !hasKey
+     */
+    const booleanVariableMatch = normalized.match(
+      /^!?[a-zA-Z_][a-zA-Z0-9_]*$/
+    );
+
+    if (booleanVariableMatch) {
+      if (normalized.startsWith("!")) {
+        const key = normalized.slice(1);
+        return !Boolean(variables[key]);
+      }
+
+      return Boolean(variables[normalized]);
+    }
+
+    /**
+     * Supports:
+     * key == value
+     * key != value
+     * key > value
+     * key < value
+     * key >= value
+     * key <= value
+     */
+    const comparisonMatch = normalized.match(
       /^([a-zA-Z_][a-zA-Z0-9_]*)\s*(==|!=|>=|<=|>|<)\s*(.+)$/
     );
 
-    if (!match) {
-      console.warn(`Unsupported condition: ${condition}`);
+    if (!comparisonMatch) {
+      console.warn(`Unsupported EveryBook condition: ${condition}`);
       return false;
     }
 
-    const [, key, operator, rawValue] = match;
+    const [, key, operator, rawValue] = comparisonMatch;
 
     const left = variables[key];
     const right = this.parseValue(rawValue);
@@ -31,20 +58,38 @@ export class ConditionEngine {
         return left !== right;
 
       case ">":
-        return Number(left) > Number(right);
+        return this.toNumber(left) > this.toNumber(right);
 
       case "<":
-        return Number(left) < Number(right);
+        return this.toNumber(left) < this.toNumber(right);
 
       case ">=":
-        return Number(left) >= Number(right);
+        return this.toNumber(left) >= this.toNumber(right);
 
       case "<=":
-        return Number(left) <= Number(right);
+        return this.toNumber(left) <= this.toNumber(right);
 
       default:
         return false;
     }
+  }
+
+  static evaluateAll(
+    conditions: Array<string | undefined>,
+    variables: Record<string, unknown>
+  ): boolean {
+    return conditions.every((condition) =>
+      this.evaluate(condition, variables)
+    );
+  }
+
+  static evaluateAny(
+    conditions: Array<string | undefined>,
+    variables: Record<string, unknown>
+  ): boolean {
+    return conditions.some((condition) =>
+      this.evaluate(condition, variables)
+    );
   }
 
   private static parseValue(value: string): unknown {
@@ -53,11 +98,37 @@ export class ConditionEngine {
     if (trimmed === "true") return true;
     if (trimmed === "false") return false;
     if (trimmed === "null") return null;
+    if (trimmed === "undefined") return undefined;
 
-    if (!Number.isNaN(Number(trimmed))) {
+    if (this.isQuoted(trimmed)) {
+      return trimmed.slice(1, -1);
+    }
+
+    if (this.isNumeric(trimmed)) {
       return Number(trimmed);
     }
 
-    return trimmed.replace(/^["']|["']$/g, "");
+    return trimmed;
+  }
+
+  private static isQuoted(value: string): boolean {
+    return (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    );
+  }
+
+  private static isNumeric(value: string): boolean {
+    return value.trim() !== "" && !Number.isNaN(Number(value));
+  }
+
+  private static toNumber(value: unknown): number {
+    const numberValue = Number(value);
+
+    if (Number.isNaN(numberValue)) {
+      return 0;
+    }
+
+    return numberValue;
   }
 }

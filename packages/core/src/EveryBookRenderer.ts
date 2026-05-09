@@ -1,35 +1,30 @@
-import DOMPurify from "dompurify";
-import { EbkPackage } from "./EbkPackage";
-import { validateManifest } from "./ManifestValidator";
-import { bindEveryBookActions } from "./actions";
+import { EbkPackage } from "./package/EbkPackage";
+import { validateManifest } from "./manifest/ManifestValidator";
+import { bindEveryBookActions } from "./runtime/actions";
 import { StoryEngine } from "./story/StoryEngine";
 import { ConditionEngine } from "./story/ConditionEngine";
+import { PageAccessEngine } from "./story/PageAccessEngine";
+import { RenderSurface } from "./rendering/RenderSurface";
+import { sanitizeEveryBookHtml } from "./security/sanitizeHtml";
 import type {
   EveryBookChapter,
+  EveryBookEntry,
   EveryBookPosition,
   EveryBookRendererOptions,
+  EveryBookStoryState,
   LoadedPage,
+  RememberedChoice,
 } from "./types";
 
 export class EveryBookRenderer {
-  private container: HTMLElement;
+  private surface: RenderSurface;
   private ebkPackage: EbkPackage | null = null;
   private storyEngine: StoryEngine | null = null;
-  private styleElement: HTMLStyleElement | null = null;
   private currentPosition: EveryBookPosition | null = null;
   private storageKey: string | null = null;
 
   constructor(options: EveryBookRendererOptions) {
-    const element =
-      typeof options.container === "string"
-        ? document.querySelector(options.container)
-        : options.container;
-
-    if (!element) {
-      throw new Error("EveryBook container not found.");
-    }
-
-    this.container = element as HTMLElement;
+    this.surface = new RenderSurface(options.container);
     this.storageKey = options.storageKey ?? null;
   }
 
@@ -55,8 +50,7 @@ export class EveryBookRenderer {
 
     await this.injectStyles();
 
-    const position =
-      this.storyEngine?.getCurrentPosition() ?? manifest.entry;
+    const position = this.storyEngine?.getCurrentPosition() ?? manifest.entry;
 
     await this.goToPage(position.chapterId, position.pageId);
   }
@@ -66,7 +60,30 @@ export class EveryBookRenderer {
       throw new Error("No EBK package loaded.");
     }
 
-    const page = await this.ebkPackage.loadPage(chapterId, pageId);
+    const manifest = this.ebkPackage.getManifest();
+    const target: EveryBookEntry = { chapterId, pageId };
+    const targetPage = this.ebkPackage.findPage(target);
+    const jumpMode = manifest.navigation?.jumpMode ?? "guarded";
+
+    const access = PageAccessEngine.canOpenPage({
+      mode: jumpMode,
+      page: targetPage,
+      state: this.storyEngine?.getState() ?? null,
+      story: this.ebkPackage.getStory(),
+      target,
+    });
+
+    if (!access.allowed) {
+      this.showBlockedPage(access.readerMessage, access.fallback);
+      return;
+    }
+
+    if (access.usedDefaultStoryline && this.storyEngine) {
+      this.storyEngine.markUsedDefaultStoryline();
+      this.storyEngine.applyDefaultVariables();
+    }
+
+    const page = await this.ebkPackage.loadPage(target);
 
     await this.renderPage(page);
   }
@@ -127,6 +144,11 @@ export class EveryBookRenderer {
 
     const manifest = this.ebkPackage.getManifest();
 
+    if (manifest.navigation?.allowBacktracking === false) {
+      this.showBlockedPage("Backtracking is disabled for this EveryBook.");
+      return;
+    }
+
     const chapterIndex = manifest.chapters.findIndex(
       (chapter) => chapter.id === this.currentPosition?.chapterId
     );
@@ -170,6 +192,9 @@ export class EveryBookRenderer {
 
     const target = this.storyEngine.applyChoice(choiceId);
 
+    this.saveProgress();
+    this.renderStoryDocumentation();
+
     await this.goToPage(target.chapterId, target.pageId);
   }
 
@@ -185,6 +210,10 @@ export class EveryBookRenderer {
     return this.ebkPackage.getChapters();
   }
 
+  getStoryState(): EveryBookStoryState | null {
+    return this.storyEngine?.getState() ?? null;
+  }
+
   getVariable<T = unknown>(key: string): T | undefined {
     return this.storyEngine?.getVariable<T>(key);
   }
@@ -192,6 +221,7 @@ export class EveryBookRenderer {
   setVariable(key: string, value: unknown): void {
     this.storyEngine?.setVariable(key, value);
     this.saveProgress();
+    this.renderStoryDocumentation();
   }
 
   saveProgress(): void {
@@ -208,6 +238,14 @@ export class EveryBookRenderer {
     }
 
     this.storyEngine.clearStorage(this.storageKey);
+    this.renderStoryDocumentation();
+  }
+
+  clear(): void {
+    this.surface.clear();
+    this.ebkPackage = null;
+    this.storyEngine = null;
+    this.currentPosition = null;
   }
 
   private async injectStyles(): Promise<void> {
@@ -215,57 +253,13 @@ export class EveryBookRenderer {
 
     const css = await this.ebkPackage.loadStyles();
 
-    if (this.styleElement) {
-      this.styleElement.remove();
-    }
-
-    this.styleElement = document.createElement("style");
-    this.styleElement.setAttribute("data-everybook-style", "true");
-    this.styleElement.textContent = css;
-
-    document.head.appendChild(this.styleElement);
+    this.surface.setBookStyles(css);
   }
 
   private async renderPage(page: LoadedPage): Promise<void> {
-    const cleanHtml = DOMPurify.sanitize(page.html, {
-      ALLOWED_TAGS: [
-        "h1",
-        "h2",
-        "h3",
-        "p",
-        "span",
-        "strong",
-        "em",
-        "section",
-        "article",
-        "div",
-        "img",
-        "audio",
-        "video",
-        "button",
-        "ul",
-        "ol",
-        "li",
-        "br",
-      ],
-      ALLOWED_ATTR: [
-        "src",
-        "alt",
-        "controls",
-        "class",
-        "id",
-        "data-ebk-action",
-        "data-target",
-        "data-chapter-id",
-        "data-page-id",
-        "data-choice-id",
-        "data-key",
-        "data-value",
-        "data-ebk-if",
-      ],
-    });
+    const cleanHtml = sanitizeEveryBookHtml(page.html);
 
-    this.container.innerHTML = cleanHtml;
+    this.surface.setContent(cleanHtml);
 
     this.currentPosition = {
       chapterId: page.chapterId,
@@ -278,8 +272,14 @@ export class EveryBookRenderer {
     }
 
     this.applyConditionalContent();
+    this.bindCurrentPageActions();
 
-    bindEveryBookActions(this.container, {
+    this.saveProgress();
+    this.renderStoryDocumentation();
+  }
+
+  private bindCurrentPageActions(): void {
+    bindEveryBookActions(this.surface.contentRoot, {
       nextPage: async () => {
         await this.nextPage();
       },
@@ -301,8 +301,40 @@ export class EveryBookRenderer {
         this.applyConditionalContent();
       },
     });
+  }
 
-    this.saveProgress();
+  private showBlockedPage(
+    message: string,
+    fallback?: EveryBookEntry
+  ): void {
+    const fallbackButton = fallback
+      ? `
+        <button
+          data-ebk-action="goToPage"
+          data-chapter-id="${escapeHtml(fallback.chapterId)}"
+          data-page-id="${escapeHtml(fallback.pageId)}"
+        >
+          Go to required story page
+        </button>
+      `
+      : "";
+
+    this.surface.setContent(`
+      <section class="ebk-blocked-page">
+        <h1>Page Locked</h1>
+        <p>${escapeHtml(message)}</p>
+
+        <div>
+          ${fallbackButton}
+          <button data-ebk-action="previousPage">
+            Go Back
+          </button>
+        </div>
+      </section>
+    `);
+
+    this.bindCurrentPageActions();
+    this.renderStoryDocumentation();
   }
 
   private applyConditionalContent(): void {
@@ -311,8 +343,9 @@ export class EveryBookRenderer {
     }
 
     const state = this.storyEngine.getState();
+
     const conditionalElements =
-      this.container.querySelectorAll<HTMLElement>("[data-ebk-if]");
+      this.surface.contentRoot.querySelectorAll<HTMLElement>("[data-ebk-if]");
 
     conditionalElements.forEach((element) => {
       const condition = element.dataset.ebkIf;
@@ -322,5 +355,198 @@ export class EveryBookRenderer {
         element.remove();
       }
     });
+  }
+
+  private renderStoryDocumentation(): void {
+    if (!this.storyEngine || !this.ebkPackage) {
+      this.surface.clearFooter();
+      return;
+    }
+
+    const state = this.storyEngine.getState();
+
+    const currentTitle = this.currentPosition
+      ? this.getReadablePosition(this.currentPosition)
+      : "No page loaded";
+
+    const choicesHtml = this.renderChoiceDocumentation(state.choices);
+    const variablesHtml = this.renderVariablesDocumentation(state.variables);
+    const visitedHtml = this.renderVisitedPagesDocumentation(state.visitedPages);
+
+    const defaultStorylineNote = state.usedDefaultStoryline
+      ? `
+        <p class="ebk-story-docs__meta">
+          Note: This session used default story assumptions because some pages were opened without earlier choices.
+        </p>
+      `
+      : "";
+
+    this.surface.setFooter(`
+      <details class="ebk-story-docs" open>
+        <summary class="ebk-story-docs__summary">
+          <div class="ebk-story-docs__header">
+            <div>
+              <h2 class="ebk-story-docs__title">Your Story Notes</h2>
+              <p class="ebk-story-docs__meta">Current page: ${escapeHtml(currentTitle)}</p>
+              ${defaultStorylineNote}
+            </div>
+
+            <span class="ebk-story-docs__toggle"></span>
+          </div>
+        </summary>
+
+        <div class="ebk-story-docs__body">
+          <section class="ebk-story-docs__section">
+            <h3 class="ebk-story-docs__section-title">Choices Made</h3>
+            ${choicesHtml}
+          </section>
+
+          <section class="ebk-story-docs__section">
+            <h3 class="ebk-story-docs__section-title">Story Variables</h3>
+            ${variablesHtml}
+          </section>
+
+          <section class="ebk-story-docs__section">
+            <h3 class="ebk-story-docs__section-title">Visited Pages</h3>
+            ${visitedHtml}
+          </section>
+        </div>
+      </details>
+    `);
+  }
+
+  private renderChoiceDocumentation(choices: RememberedChoice[]): string {
+    if (!choices.length) {
+      return `<p class="ebk-story-docs__empty">No choices made yet.</p>`;
+    }
+
+    const items = choices
+      .map((choice) => {
+        const choiceLabel = this.getChoiceLabel(choice.choiceId);
+        const source = this.getReadablePosition({
+          chapterId: choice.chapterId,
+          pageId: choice.pageId,
+        });
+
+        return `
+          <li class="ebk-story-docs__item">
+            <strong>${escapeHtml(choiceLabel)}</strong>
+            <br />
+            <span>Made at ${escapeHtml(source)}</span>
+          </li>
+        `;
+      })
+      .join("");
+
+    return `<ol class="ebk-story-docs__list">${items}</ol>`;
+  }
+
+  private renderVariablesDocumentation(
+    variables: Record<string, unknown>
+  ): string {
+    const entries = Object.entries(variables);
+
+    if (!entries.length) {
+      return `<p class="ebk-story-docs__empty">No story variables yet.</p>`;
+    }
+
+    const chips = entries
+      .map(([key, value]) => {
+        return `
+          <span class="ebk-story-docs__chip">
+            ${escapeHtml(key)} = ${escapeHtml(formatValue(value))}
+          </span>
+        `;
+      })
+      .join("");
+
+    return `<div class="ebk-story-docs__variables">${chips}</div>`;
+  }
+
+  private renderVisitedPagesDocumentation(visitedPages: string[]): string {
+    if (!visitedPages.length) {
+      return `<p class="ebk-story-docs__empty">No visited pages yet.</p>`;
+    }
+
+    const items = visitedPages
+      .slice(-10)
+      .map((pageKey) => {
+        const [chapterId, pageId] = pageKey.includes(":")
+          ? pageKey.split(":")
+          : pageKey.split("/");
+
+        const title = this.getReadablePosition({
+          chapterId,
+          pageId,
+        });
+
+        return `
+          <li class="ebk-story-docs__item">
+            ${escapeHtml(title)}
+          </li>
+        `;
+      })
+      .join("");
+
+    return `<ol class="ebk-story-docs__list">${items}</ol>`;
+  }
+
+  private getChoiceLabel(choiceId: string): string {
+    const story = this.storyEngine?.getStory();
+    const choice = story?.choices?.find((item) => item.id === choiceId);
+
+    return choice?.label ?? choiceId;
+  }
+
+  private getReadablePosition(position: {
+    chapterId: string;
+    pageId: string;
+  }): string {
+    const manifest = this.ebkPackage?.getManifest();
+
+    if (!manifest) {
+      return `${position.chapterId} / ${position.pageId}`;
+    }
+
+    const chapter = manifest.chapters.find(
+      (item) => item.id === position.chapterId
+    );
+
+    const page = chapter?.pages.find((item) => item.id === position.pageId);
+
+    const chapterTitle = chapter?.title ?? position.chapterId;
+    const pageTitle = page?.title ?? position.pageId;
+
+    return `${chapterTitle} / ${pageTitle}`;
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace("&", "&amp;")
+    .replace("<", "&lt;")
+    .replace(">", "&gt;")
+    .replace('"', "&quot;")
+    .replace("'", "&#039;");
+}
+
+function formatValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    value === null ||
+    value === undefined
+  ) {
+    return String(value);
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
   }
 }
