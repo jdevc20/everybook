@@ -1,14 +1,14 @@
 # EveryBook Core
 
-`@everybook/core` is the main rendering engine package for the EveryBook project.
+`@everybook/core` is the rendering engine for the EveryBook project.
 
-It is responsible for opening an `.ebk` file, reading its manifest, loading chapters, applying styles, sanitizing content, and rendering the book into a web container.
+It opens `.ebk` files, reads their manifest, loads chapters and pages, applies styles, sanitizes HTML, manages interactive story state, and renders books into a Shadow DOM container.
 
-EveryBook Core is the foundation that future EveryBook apps will use:
+EveryBook Core is the foundation for future EveryBook apps:
 
 ```text
 EveryBook Core
-├─ Web Reader
+├─ Web Reader (examples/react-reader — working demo)
 ├─ Android Reader
 ├─ Desktop Reader
 ├─ EveryBook Writer
@@ -17,74 +17,28 @@ EveryBook Core
 
 ---
 
-## What is EveryBook Core?
+## What is an `.ebk` File?
 
-EveryBook Core is a TypeScript library that acts as the first version of the EveryBook renderer.
+An `.ebk` file is a ZIP archive renamed to `.ebk`.
 
-Its main purpose is to read and render `.ebk` files.
+It contains:
 
-An `.ebk` file is a packaged interactive book file. It can contain:
+- `manifest.json` — book metadata, chapter/page structure, entry point, navigation rules, permissions
+- `story/story.json` (optional) — interactive story definition: choices, variables, timelines, endings
+- HTML page files
+- CSS stylesheets
+- Images, audio, video
 
-- `manifest.json`
-- HTML chapters
-- CSS styles
-- Images
-- Audio
-- Video
-- Future scripts
-- Book metadata
-- Permission rules
-
-The core renderer does not act like a normal website. It controls what the book is allowed to do.
-
-This makes EveryBook safer, more portable, and easier to support across platforms.
-
----
-
-## Main Goal
-
-The first goal of `@everybook/core` is simple:
+The ZIP root must contain `manifest.json` directly:
 
 ```text
-Open .ebk
-Read manifest.json
-Load first chapter
-Render HTML
-Apply CSS
-Handle chapter navigation
-```
-
-Example flow:
-
-```text
-hello-world.ebk
-   ↓
-EveryBook Core
-   ↓
-Read manifest.json
-   ↓
-Load chapters/start.html
-   ↓
-Render into #reader
-   ↓
-Click "Enter the forest"
-   ↓
-Load chapters/forest.html
+hello-world.ebk/manifest.json   ✓ correct
+hello-world.ebk/hello-world/manifest.json   ✗ wrong
 ```
 
 ---
 
-## Package Name
-
-```text
-@everybook/core
-```
-
----
-
-## Project Location
-
-Recommended monorepo structure:
+## Monorepo Structure
 
 ```text
 everybook/
@@ -94,102 +48,52 @@ everybook/
 │  └─ core/
 │     ├─ package.json
 │     ├─ tsconfig.json
-│     ├─ src/
-│     │  ├─ index.ts
-│     │  ├─ EveryBookRenderer.ts
-│     │  ├─ EbkPackage.ts
-│     │  ├─ ManifestValidator.ts
-│     │  ├─ actions.ts
-│     │  └─ types.ts
-│     └─ dist/
+│     └─ src/
+│        ├─ index.ts
+│        ├─ types.ts
+│        ├─ EveryBookRenderer.ts
+│        ├─ manifest/
+│        │  └─ ManifestValidator.ts
+│        ├─ package/
+│        │  └─ EbkPackage.ts
+│        ├─ rendering/
+│        │  └─ RenderSurface.ts
+│        ├─ runtime/
+│        │  └─ actions.ts
+│        ├─ security/
+│        │  ├─ sanitizeHtml.ts
+│        │  └─ pathSecurity.ts
+│        └─ story/
+│           ├─ StoryEngine.ts
+│           ├─ StoryState.ts
+│           ├─ ConditionEngine.ts
+│           └─ PageAccessEngine.ts
 └─ examples/
-   └─ react-reader/
+   └─ react-reader/   ← working React + Vite demo
 ```
-
----
-
-## What EveryBook Core Does
-
-Current responsibilities:
-
-- Load `.ebk` files
-- Read ZIP package contents
-- Find `manifest.json`
-- Parse the manifest
-- Validate required manifest fields
-- Load the entry chapter
-- Load CSS files
-- Sanitize HTML
-- Render the chapter into a DOM container
-- Bind EveryBook actions
-- Navigate between chapters using `data-ebk-action`
-
----
-
-## What EveryBook Core Does Not Do Yet
-
-Do not expect the core to support everything immediately.
-
-Not yet included in early versions:
-
-- Full JavaScript runtime
-- Full browser APIs
-- Network access
-- EPUB compatibility
-- Full pagination engine
-- Native Android rendering
-- DRM
-- Cloud sync
-- Accounts
-- Marketplace
-- Visual Writer app
-
-These can come later after the core renderer becomes stable.
 
 ---
 
 ## Installation in Workspace
 
-Inside another package in the same monorepo, install the core package using workspace linking:
-
 ```bash
 pnpm add @everybook/core@workspace:*
 ```
 
-Example package:
-
-```json
-{
-  "dependencies": {
-    "@everybook/core": "workspace:*"
-  }
-}
-```
-
 ---
 
-## Build Command
-
-From the root folder:
+## Build Commands
 
 ```bash
+# From root
 pnpm --filter @everybook/core build
-```
-
-Or using a root script:
-
-```bash
 pnpm build:core
-```
 
-From inside the core package:
-
-```bash
-cd packages/core
+# From packages/core
 pnpm build
 ```
 
-Successful build output should create:
+Successful build output:
 
 ```text
 packages/core/dist/
@@ -203,41 +107,19 @@ packages/core/dist/
 
 ## Basic Usage
 
-In a web or React project:
-
 ```ts
 import { EveryBookRenderer } from "@everybook/core";
 
 const renderer = new EveryBookRenderer({
-  container: "#reader"
-});
-
-await renderer.open(file);
-```
-
-Where `file` is a selected `.ebk` file from an input:
-
-```html
-<input id="fileInput" type="file" accept=".ebk,.zip" />
-<div id="reader"></div>
-```
-
-Example:
-
-```ts
-import { EveryBookRenderer } from "@everybook/core";
-
-const renderer = new EveryBookRenderer({
-  container: "#reader"
+  container: "#reader",
+  storageKey: "everybook:my-book"   // optional: enables localStorage save/load
 });
 
 const fileInput = document.querySelector<HTMLInputElement>("#fileInput");
 
 fileInput?.addEventListener("change", async () => {
   const file = fileInput.files?.[0];
-
   if (!file) return;
-
   await renderer.open(file);
 });
 ```
@@ -246,98 +128,88 @@ fileInput?.addEventListener("change", async () => {
 
 ## React Usage Example
 
-Example component:
-
 ```tsx
-import { useEffect, useRef } from "react";
+import { useRef, useState } from "react";
 import { EveryBookRenderer } from "@everybook/core";
+import type { EveryBookChapter, EveryBookPosition } from "@everybook/core";
 
 export default function EveryBookReader() {
   const readerRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<EveryBookRenderer | null>(null);
-
-  useEffect(() => {
-    if (!readerRef.current) return;
-
-    rendererRef.current = new EveryBookRenderer({
-      container: readerRef.current
-    });
-  }, []);
+  const [position, setPosition] = useState<EveryBookPosition | null>(null);
+  const [toc, setToc] = useState<EveryBookChapter[]>([]);
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
+    if (!file || !readerRef.current) return;
 
-    if (!file || !rendererRef.current) return;
+    const renderer = new EveryBookRenderer({
+      container: readerRef.current,
+      storageKey: `everybook:${file.name}`,
+    });
 
-    await rendererRef.current.open(file);
+    rendererRef.current = renderer;
+    await renderer.open(file);
+    setToc(renderer.getTableOfContents());
+    setPosition(renderer.getCurrentPosition());
+  }
+
+  async function handleNext() {
+    await rendererRef.current?.nextPage();
+    setPosition(rendererRef.current?.getCurrentPosition() ?? null);
+  }
+
+  async function handlePrevious() {
+    await rendererRef.current?.previousPage();
+    setPosition(rendererRef.current?.getCurrentPosition() ?? null);
   }
 
   return (
     <main>
-      <input type="file" accept=".ebk,.zip" onChange={handleFileChange} />
-
-      <div
-        ref={readerRef}
-        style={{
-          marginTop: "24px",
-          padding: "32px",
-          border: "1px solid #ddd",
-          borderRadius: "16px",
-          minHeight: "500px"
-        }}
-      />
+      <input type="file" accept=".ebk" onChange={handleFileChange} />
+      <button onClick={handlePrevious}>Previous</button>
+      <button onClick={handleNext}>Next</button>
+      <div ref={readerRef} id="reader" />
     </main>
   );
 }
 ```
 
----
-
-## `.ebk` File Structure
-
-A basic `.ebk` file is a ZIP archive renamed to `.ebk`.
-
-Example:
-
-```text
-hello-world.ebk
-├─ manifest.json
-├─ chapters/
-│  ├─ start.html
-│  └─ forest.html
-└─ styles/
-   └─ book.css
-```
-
-Important:
-
-The ZIP root must contain `manifest.json` directly.
-
-Correct:
-
-```text
-hello-world.ebk/manifest.json
-```
-
-Wrong:
-
-```text
-hello-world.ebk/hello-world/manifest.json
-```
+The working full-featured demo lives in `examples/react-reader/`.
 
 ---
 
 ## Manifest Format
 
-Example `manifest.json`:
+`manifest.json`:
 
 ```json
 {
+  "id": "hello-world",
   "format": "everybook",
   "version": "0.1.0",
   "title": "Hello EveryBook",
-  "entry": "chapters/start.html",
+  "author": "Your Name",
+  "entry": {
+    "chapterId": "chapter-1",
+    "pageId": "start"
+  },
+  "story": "story/story.json",
   "styles": ["styles/book.css"],
+  "chapters": [
+    {
+      "id": "chapter-1",
+      "title": "The First Door",
+      "pages": [
+        { "id": "start", "title": "Start", "src": "pages/start.html" },
+        { "id": "forest", "title": "The Forest", "src": "pages/forest.html" }
+      ]
+    }
+  ],
+  "navigation": {
+    "jumpMode": "guarded",
+    "allowBacktracking": true
+  },
   "permissions": {
     "audio": false,
     "video": false,
@@ -350,43 +222,132 @@ Example `manifest.json`:
 ### Manifest Fields
 
 | Field | Required | Description |
-|---|---:|---|
+|---|:---:|---|
+| `id` | Yes | Unique book identifier |
 | `format` | Yes | Must be `"everybook"` |
 | `version` | Yes | EveryBook format version |
 | `title` | Yes | Book title |
-| `entry` | Yes | First chapter to open |
+| `entry` | Yes | Starting `{ chapterId, pageId }` |
+| `chapters` | Yes | Array of chapters, each with `id`, `title`, and `pages` |
+| `author` | No | Book author name |
+| `language` | No | Language code (e.g. `"en"`) |
+| `description` | No | Short book description |
+| `cover` | No | Path to cover image inside the package |
+| `story` | No | Path to `story.json` inside the package |
 | `styles` | No | CSS files to load |
-| `permissions` | No | Book permission rules |
+| `navigation` | No | Navigation rules (`jumpMode`, `allowBacktracking`, `defaultEntry`) |
+| `permissions` | No | Permission flags (`audio`, `video`, `network`, `storage`) |
+
+### Navigation Modes (`jumpMode`)
+
+| Mode | Behavior |
+|---|---|
+| `free` | Reader can jump anywhere. If page requirements fail, default story variables are applied. |
+| `guarded` | Reader can jump to most pages, but pages with `access.requirements` are protected. |
+| `storyStrict` | Reader can only open pages they have already visited or that were explicitly unlocked. |
 
 ---
 
-## Example Chapter
+## Story Format
 
-`chapters/start.html`
+When `manifest.story` points to a JSON file inside the package, the story engine is activated.
+
+`story/story.json`:
+
+```json
+{
+  "version": "0.1.0",
+  "start": { "chapterId": "chapter-1", "pageId": "start" },
+  "mainTimeline": "main",
+  "timelines": [
+    { "id": "main", "title": "Main Story" },
+    { "id": "dark-route", "title": "The Dark Path" }
+  ],
+  "variables": {
+    "coins": 0,
+    "hasKey": false
+  },
+  "choices": [
+    {
+      "id": "enter-forest",
+      "label": "Enter the forest",
+      "goTo": { "chapterId": "chapter-1", "pageId": "forest" },
+      "effects": [
+        { "type": "setVariable", "key": "hasKey", "value": true },
+        { "type": "incrementVariable", "key": "coins", "value": 5 }
+      ]
+    }
+  ],
+  "endings": [
+    {
+      "id": "good-ending",
+      "title": "The Good Ending",
+      "condition": "hasKey",
+      "page": { "chapterId": "chapter-2", "pageId": "victory" }
+    }
+  ]
+}
+```
+
+### Choice Effects
+
+| Effect type | Description |
+|---|---|
+| `setVariable` | Sets a story variable to a value |
+| `incrementVariable` | Adds a number to a numeric variable |
+| `setTimeline` | Switches the active story timeline |
+| `rememberChoice` | Records an additional choice ID alongside the current one |
+
+---
+
+## Page Access Rules
+
+Pages can define `access` rules in the manifest to control when they can be opened:
+
+```json
+{
+  "id": "secret-room",
+  "src": "pages/secret-room.html",
+  "access": {
+    "requirements": [
+      { "type": "choiceMade", "choiceId": "find-key" },
+      { "type": "variableEquals", "key": "hasKey", "value": true }
+    ],
+    "fallback": { "chapterId": "chapter-1", "pageId": "locked-door" },
+    "lockedMessage": "You need the key to enter this room."
+  }
+}
+```
+
+### Requirement Types
+
+| Type | Description |
+|---|---|
+| `choiceMade` | Reader must have made a specific choice |
+| `variableExists` | A story variable must be present |
+| `variableEquals` | A story variable must equal a specific value |
+| `visitedPage` | A specific chapter/page must already have been visited |
+
+---
+
+## Example Page HTML
+
+`pages/start.html`:
 
 ```html
 <section class="page">
   <h1>The First Door</h1>
-
   <p>You wake up in front of two paths.</p>
 
-  <button data-ebk-action="goTo" data-target="chapters/forest.html">
+  <button data-ebk-action="choice" data-choice-id="enter-forest">
     Enter the forest
   </button>
-</section>
-```
 
-`chapters/forest.html`
-
-```html
-<section class="page">
-  <h1>The Forest</h1>
-
-  <p>The trees whisper around you.</p>
-
-  <button data-ebk-action="goTo" data-target="chapters/start.html">
-    Go back
+  <button data-ebk-action="nextPage">
+    Continue reading
   </button>
+
+  <p data-ebk-if="hasKey">You have the key.</p>
 </section>
 ```
 
@@ -394,264 +355,199 @@ Example `manifest.json`:
 
 ## EveryBook Actions
 
-EveryBook Core uses controlled actions instead of unrestricted JavaScript.
+Actions are triggered by `data-ebk-action` on any HTML element.
+No raw JavaScript is needed or allowed inside page HTML.
 
-Current supported action:
+| Action | Required attributes | Description |
+|---|---|---|
+| `nextPage` | — | Go to the next page in sequence |
+| `previousPage` or `back` | — | Go to the previous page |
+| `goToPage` | `data-chapter-id`, `data-page-id` | Jump to a specific chapter/page |
+| `choice` | `data-choice-id` | Apply a story choice and navigate to its target |
+| `setVariable` | `data-key`, `data-value` | Set a story variable directly |
 
-```text
-goTo
-```
-
-Example:
+Examples:
 
 ```html
-<button data-ebk-action="goTo" data-target="chapters/forest.html">
-  Enter the forest
+<button data-ebk-action="nextPage">Next</button>
+
+<button data-ebk-action="previousPage">Back</button>
+
+<button data-ebk-action="goToPage" data-chapter-id="chapter-2" data-page-id="bridge">
+  Cross the bridge
+</button>
+
+<button data-ebk-action="choice" data-choice-id="take-sword">
+  Take the sword
+</button>
+
+<button data-ebk-action="setVariable" data-key="doorOpen" data-value="true">
+  Open the door
 </button>
 ```
 
-The renderer sees:
+---
 
-```text
-data-ebk-action="goTo"
-data-target="chapters/forest.html"
-```
+## Conditional Content
 
-Then it loads the target chapter.
-
-This is safer than allowing raw JavaScript like this:
+Elements with `data-ebk-if` are shown or hidden based on story variables.
+The expression is evaluated by `ConditionEngine` against the current story state.
 
 ```html
-<script>
-  window.location = "chapters/forest.html";
-</script>
+<p data-ebk-if="hasKey">You have the key.</p>
+<p data-ebk-if="!hasKey">The door is locked.</p>
+<p data-ebk-if="coins >= 10">You can afford the item.</p>
+<p data-ebk-if="ending == 'good'">You chose wisely.</p>
 ```
 
----
+### Condition Syntax
 
-## Why Controlled Actions?
-
-Controlled actions make EveryBook safer and more portable.
-
-Benefits:
-
-- Easier to sandbox
-- Easier to support on Android
-- Easier to support on old PCs
-- Easier to validate
-- Easier to document
-- Less security risk
-- More consistent rendering
-
-EveryBook should behave like a book format, not like a random website.
-
----
-
-## CSS Support
-
-EveryBook Core can load CSS files listed in the manifest.
-
-Example:
-
-```json
-{
-  "styles": ["styles/book.css"]
-}
-```
-
-Example CSS:
-
-```css
-.page {
-  max-width: 680px;
-  margin: 0 auto;
-  padding: 48px;
-  font-family: Georgia, serif;
-  line-height: 1.7;
-}
-
-.page h1 {
-  font-size: 40px;
-}
-
-.page button {
-  margin-top: 24px;
-  padding: 12px 18px;
-  border: 1px solid #111827;
-  border-radius: 12px;
-  background: white;
-  cursor: pointer;
-}
-```
+| Format | Example | Description |
+|---|---|---|
+| Variable truthy | `hasKey` | True when variable is truthy |
+| Variable falsy | `!hasKey` | True when variable is falsy |
+| Equality | `ending == 'good'` | Strict equality |
+| Inequality | `status != 'dead'` | Strict inequality |
+| Numeric comparison | `coins >= 10` | Greater than or equal |
+| Numeric comparison | `health < 50` | Less than |
 
 ---
 
 ## HTML Sanitization
 
-EveryBook Core sanitizes HTML before rendering.
+All page HTML is sanitized with DOMPurify before rendering.
 
-This helps prevent unsafe content from running inside the reader.
-
-Allowed early tags may include:
+Allowed tags:
 
 ```text
-h1
-h2
-h3
-p
-span
-strong
-em
-section
-article
-div
-img
-audio
-video
+h1 h2 h3 h4 h5 h6
+p span strong em
+section article div
+img audio video
 button
-ul
-ol
-li
-br
+ul ol li
+br blockquote hr
 ```
 
-Allowed early attributes may include:
+Allowed attributes:
 
 ```text
-src
-alt
-controls
-class
-id
-data-ebk-action
-data-target
+src alt controls class id title
+data-ebk-action data-target data-chapter-id data-page-id
+data-choice-id data-key data-value data-ebk-if
 ```
 
-Blocked or avoided in early versions:
+Blocked:
 
 ```text
-script
-iframe
-external scripts
-onclick
-localStorage
-cookies
-network requests
-file system access
+script iframe object embed form
+input textarea select link meta base
+onclick onload onerror onmouseover onfocus onblur style
 ```
 
 ---
 
-## Core Source Files
+## Shadow DOM Rendering
 
-Recommended source files:
+The renderer mounts all book content inside a Shadow DOM attached to the container element.
 
-```text
-src/
-├─ index.ts
-├─ EveryBookRenderer.ts
-├─ EbkPackage.ts
-├─ ManifestValidator.ts
-├─ actions.ts
-└─ types.ts
-```
+This means:
 
-### `index.ts`
-
-Exports the public API.
-
-```ts
-export { EveryBookRenderer } from "./EveryBookRenderer";
-
-export type {
-  EveryBookManifest,
-  EveryBookRendererOptions,
-  LoadedChapter
-} from "./types";
-```
-
-### `EveryBookRenderer.ts`
-
-Main renderer class.
-
-Responsible for:
-
-- Opening EBK files
-- Loading styles
-- Rendering chapters
-- Navigating chapters
-- Binding actions
-
-### `EbkPackage.ts`
-
-Responsible for:
-
-- Reading ZIP file
-- Loading `manifest.json`
-- Loading text files
-- Loading entry chapter
-- Loading CSS files
-
-### `ManifestValidator.ts`
-
-Responsible for validating:
-
-- `format`
-- `version`
-- `title`
-- `entry`
-- unsupported permissions
-
-### `actions.ts`
-
-Responsible for binding controlled EveryBook actions.
-
-Example:
-
-```text
-data-ebk-action="goTo"
-```
-
-### `types.ts`
-
-Contains shared TypeScript types.
+- Book styles are scoped and cannot leak into the host page
+- Host page styles cannot accidentally affect the book
+- The renderer is self-contained and safe to embed anywhere
 
 ---
 
-## TypeScript Types
+## Path Security
 
-Example:
+All file paths referenced inside `.ebk` files are validated before use.
+
+Blocked paths:
+
+- Absolute paths starting with `/`
+- Path traversal using `../`
+- URLs with blocked protocols: `http:`, `https:`, `javascript:`, `data:`, `blob:`, `file:`, `ftp:`, `mailto:`
+
+---
+
+## Progress Save and Load
+
+When `storageKey` is set, the renderer automatically saves story state to `localStorage` after each page navigation or choice.
 
 ```ts
-export type EveryBookManifest = {
-  format: "everybook";
-  version: string;
-  title: string;
-  entry: string;
-  styles?: string[];
-  permissions?: {
-    audio?: boolean;
-    video?: boolean;
-    network?: boolean;
-    storage?: boolean;
-  };
-};
-
-export type EveryBookRendererOptions = {
-  container: HTMLElement | string;
-};
-
-export type LoadedChapter = {
-  path: string;
-  html: string;
-};
+const renderer = new EveryBookRenderer({
+  container: "#reader",
+  storageKey: "everybook"
+});
 ```
+
+The storage key is namespaced internally as `storageKey:bookId:state`.
+
+Progress can be cleared with:
+
+```ts
+renderer.clearProgress();
+```
+
+---
+
+## Renderer API
+
+```ts
+// Open an .ebk file (File, Blob, or ArrayBuffer)
+await renderer.open(file);
+
+// Navigate pages
+await renderer.nextPage();
+await renderer.previousPage();
+await renderer.goToPage(chapterId, pageId);
+
+// Apply a story choice
+await renderer.applyChoice(choiceId);
+
+// Read state
+renderer.getCurrentPosition();     // EveryBookPosition | null
+renderer.getTableOfContents();     // EveryBookChapter[]
+renderer.getStoryState();          // EveryBookStoryState | null
+renderer.getVariable<T>(key);      // T | undefined
+
+// Set a variable (also saves progress and re-evaluates conditional content)
+renderer.setVariable(key, value);
+
+// Save / clear progress
+renderer.saveProgress();
+renderer.clearProgress();
+
+// Clear the renderer
+renderer.clear();
+```
+
+---
+
+## Source Files
+
+| File | Responsibility |
+|---|---|
+| `index.ts` | Public API exports |
+| `types.ts` | All shared TypeScript types |
+| `EveryBookRenderer.ts` | Main orchestration class |
+| `manifest/ManifestValidator.ts` | Validates manifest structure and required fields |
+| `package/EbkPackage.ts` | Reads the ZIP, loads manifest, pages, styles, story |
+| `rendering/RenderSurface.ts` | Manages Shadow DOM, content, footer, and book styles |
+| `runtime/actions.ts` | Binds `data-ebk-action` elements to renderer handlers |
+| `security/sanitizeHtml.ts` | DOMPurify-based HTML sanitizer |
+| `security/pathSecurity.ts` | Validates and sanitizes file paths |
+| `story/StoryEngine.ts` | Controls choices, variables, timelines, save/load |
+| `story/StoryState.ts` | Stores and manages the reader's mutable story progress |
+| `story/ConditionEngine.ts` | Evaluates condition expressions against story variables |
+| `story/PageAccessEngine.ts` | Enforces page access rules across all navigation modes |
 
 ---
 
 ## Root Workspace Setup
 
-Root `package.json`:
+`package.json`:
 
 ```json
 {
@@ -671,7 +567,7 @@ Root `package.json`:
 }
 ```
 
-Root `pnpm-workspace.yaml`:
+`pnpm-workspace.yaml`:
 
 ```yaml
 packages:
@@ -709,178 +605,28 @@ packages:
 }
 ```
 
-`packages/core/tsconfig.json`:
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "lib": ["ES2020", "DOM"],
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "declaration": true,
-    "declarationMap": true,
-    "emitDeclarationOnly": false,
-    "outDir": "dist",
-    "strict": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true
-  },
-  "include": ["src"],
-  "exclude": ["dist", "node_modules"]
-}
-```
-
----
-
-## Creating a Sample `.ebk`
-
-Create this folder:
-
-```text
-examples/sample-books/hello-world/
-```
-
-Structure:
-
-```text
-hello-world/
-├─ manifest.json
-├─ chapters/
-│  ├─ start.html
-│  └─ forest.html
-└─ styles/
-   └─ book.css
-```
-
-Then compress it.
-
-PowerShell:
-
-```powershell
-cd C:\Dev\Projects\EveryBook\everybook\examples\sample-books\hello-world
-
-Compress-Archive -Path manifest.json,chapters,styles -DestinationPath ..\hello-world.zip -Force
-
-Rename-Item ..\hello-world.zip hello-world.ebk
-```
-
-The final file should be:
-
-```text
-examples/sample-books/hello-world.ebk
-```
-
 ---
 
 ## Common Errors
 
-### Import is red
+### Import is red in the editor
 
-Problem:
-
-```ts
-import { EveryBookRenderer } from "@everybook/core";
-```
-
-Possible fixes:
-
-1. Make sure the example app has:
-
-```json
-"@everybook/core": "workspace:*"
-```
-
-2. Make sure `pnpm-workspace.yaml` includes:
-
-```yaml
-packages:
-  - "packages/*"
-  - "examples/*"
-```
-
-3. Run from root:
-
-```bash
-pnpm install
-pnpm --filter @everybook/core build
-```
-
-4. Restart TypeScript server in VS Code.
-
----
+1. Make sure the consuming package has `"@everybook/core": "workspace:*"` in its dependencies.
+2. Make sure `pnpm-workspace.yaml` includes both `packages/*` and `examples/*`.
+3. Run `pnpm install` and `pnpm --filter @everybook/core build` from the root.
+4. Restart the TypeScript server in VS Code.
 
 ### No projects matched the filters
 
-Example error:
-
-```text
-No projects matched the filters
-```
-
-This means the package name in the command does not match the package name in `package.json`.
-
-If your example package is:
-
-```json
-"name": "react-reader"
-```
-
-Run:
+The package name in the filter must exactly match the `"name"` field in `package.json`.
 
 ```bash
-pnpm --filter react-reader dev
+pnpm --filter react-reader dev   # correct if name is "react-reader"
 ```
 
-Not:
+### DTS build error
 
-```bash
-pnpm --filter react-render dev
-```
-
----
-
-### Cannot find `src/index.ts`
-
-This usually means the script is running from the wrong folder or the package is incorrectly named.
-
-Make sure:
-
-```text
-packages/core/package.json
-packages/core/src/index.ts
-```
-
-exist.
-
-Also make sure root `package.json` is not named `@everybook/core`.
-
-Root should be:
-
-```json
-{
-  "name": "everybook",
-  "private": true
-}
-```
-
-Only the core package should be:
-
-```json
-{
-  "name": "@everybook/core"
-}
-```
-
----
-
-### DTS Build Error
-
-If JavaScript builds but DTS fails, check `tsconfig.json`.
-
-Make sure it includes:
+Ensure `tsconfig.json` includes:
 
 ```json
 {
@@ -894,144 +640,55 @@ Make sure it includes:
 }
 ```
 
-Then run:
-
-```bash
-pnpm --filter @everybook/core build
-```
-
 ---
 
 ## Roadmap
 
-### Version 0.1.0
+### Version 0.1.0 — Core Renderer ✓
 
-- Open `.ebk`
-- Read manifest
-- Load entry chapter
-- Render HTML
-- Load CSS
-- Handle `goTo`
+- Open `.ebk` ZIP files
+- Read and validate `manifest.json`
+- Chapter and page structure
+- Entry page rendering
+- CSS loading and scoped Shadow DOM injection
+- HTML sanitization with DOMPurify
+- Path security validation
+- Controlled `data-ebk-action` system
+- `nextPage`, `previousPage`, `goToPage`, `choice`, `setVariable` actions
+- Story engine: choices, variables, timelines, endings
+- `free`, `guarded`, and `storyStrict` navigation modes
+- Page access requirements: `choiceMade`, `variableExists`, `variableEquals`, `visitedPage`
+- Conditional content with `data-ebk-if`
+- `ConditionEngine` for expression evaluation
+- localStorage save/load/clear
+- Story notes footer (choices, variables, visited pages)
+- React reader demo
 
 ### Version 0.2.0
 
-- Image asset support
-- Audio support
-- Video support
-- Better errors
-- Reader progress
-- Previous/next chapter history
+- Image, audio, video asset support within the package
+- Better error messages
+- Chapter history and backtracking improvements
 
 ### Version 0.3.0
 
-- Book variables
-- `setVariable`
-- `getVariable`
-- Conditional content
 - Simple dialogs
+- More condition operators
 
 ### Version 0.4.0
 
-- CLI validator
-- `everybook validate`
-- `everybook build`
-- `everybook create`
+- CLI tools: `everybook validate`, `everybook build`, `everybook create`
 
 ### Version 0.5.0
 
 - Android reader proof of concept
 - WebView-based reader
-- Local `.ebk` opening
-- Local progress saving
-
----
-
-## Future API Ideas
-
-Possible future API:
-
-```ts
-const renderer = new EveryBookRenderer({
-  container: "#reader",
-  storage: "local",
-  mode: "standard"
-});
-
-await renderer.open(file);
-
-renderer.on("chapterChange", (chapter) => {
-  console.log("Current chapter:", chapter.path);
-});
-```
-
-Possible future actions:
-
-```html
-<button data-ebk-action="setVariable" data-key="hasKey" data-value="true">
-  Pick up key
-</button>
-
-<button data-ebk-action="goTo" data-target="chapters/locked-door.html">
-  Go to locked door
-</button>
-```
-
----
-
-## Development Priority
-
-Build in this order:
-
-```text
-1. Core rendering
-2. Chapter navigation
-3. Asset loading
-4. Reader progress
-5. CLI validation
-6. Web reader UI
-7. Android reader
-8. Writer app
-```
+- Local `.ebk` opening on device
 
 ---
 
 ## Design Principle
 
-EveryBook should be:
+EveryBook is a programmable book format, not a website inside a ZIP.
 
-```text
-A programmable book format.
-```
-
-Not:
-
-```text
-A website inside a ZIP.
-```
-
-The renderer should control the book experience.
-
-The `.ebk` file should be portable.
-
-The core should be reusable across platforms.
-
----
-
-## Summary
-
-`@everybook/core` is the heart of the EveryBook project.
-
-It should remain focused, reusable, and platform-friendly.
-
-Its first job is not to do everything.
-
-Its first job is to prove that this works:
-
-```text
-Open .ebk
-Render chapter
-Click choice
-Navigate chapter
-```
-
-Once that is stable, EveryBook can grow into a full open-source interactive book ecosystem.
+The renderer controls the book experience. The `.ebk` file is portable. The core is reusable across platforms.
