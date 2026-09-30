@@ -794,9 +794,9 @@ Add safe package asset loading for:
 
 with object URL lifecycle management.
 
-### Engine / renderer separation
+### Additional renderer adapters
 
-Long term, the target architecture is:
+The engine / renderer separation is now in place:
 
 ```text
                .ebk
@@ -807,18 +807,16 @@ Long term, the target architecture is:
         ├─ Navigation
         ├─ Story
         ├─ State
-        ├─ Conditions
-        ├─ Assets
-        └─ Events
+        └─ Conditions
                 │
                 ▼
-        Renderer Adapter
-        ├─ Browser
-        ├─ React
-        └─ Future clients
+      EveryBookRenderer
+        ├─ HTML sanitization
+        ├─ DOM action binding
+        └─ Shadow DOM presentation
 ```
 
-The goal is for story and navigation logic to remain independent from any single UI framework.
+The next step is to build additional adapters on top of the same headless engine, such as React-specific bindings, CLI/story simulation, and future Electron or mobile integrations.
 
 ---
 
