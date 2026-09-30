@@ -197,7 +197,9 @@ function App() {
     if (previousPage) return { chapterId: chapter.id, pageId: previousPage.id };
 
     const previousChapter = toc[chapterIndex - 1];
-    const lastPage = previousChapter?.pages.at(-1);
+    const lastPage = previousChapter?.pages.length
+      ? previousChapter.pages[previousChapter.pages.length - 1]
+      : undefined;
 
     return lastPage
       ? { chapterId: previousChapter.id, pageId: lastPage.id }
