@@ -130,7 +130,9 @@ export type EveryBookRendererOptions = {
   storageKey?: string;
 };
 
-export type EveryBookEngineOptions = EveryBookRendererOptions;
+export type EveryBookEngineOptions = {
+  storageKey?: string;
+};
 
 export type LoadedPage = {
   chapterId: string;
