@@ -1,4 +1,4 @@
-const BLOCKED_PROTOCOLS = [
+const BLOCKED_PROTOCOLS = new Set([
   "http:",
   "https:",
   "javascript:",
@@ -7,46 +7,63 @@ const BLOCKED_PROTOCOLS = [
   "file:",
   "ftp:",
   "mailto:",
-];
+]);
+
+function normalizeEbkPath(path: string): string {
+  return path.replaceAll("\\", "/").trim();
+}
 
 export function assertSafeEbkPath(path: string): void {
-  if (!path || typeof path !== "string") {
-    throw new Error("Invalid EBK path.");
-  }
-
-  const normalizedPath = path.replace("\\", "/").trim();
-
-  if (!normalizedPath) {
+  if (typeof path !== "string" || !path.trim()) {
     throw new Error("Invalid EBK path: path is empty.");
   }
 
-  if (normalizedPath.startsWith("/")) {
+  const normalizedPath = normalizeEbkPath(path);
+
+  if (normalizedPath.includes("\0")) {
+    throw new Error("Unsafe EBK path: null bytes are not allowed.");
+  }
+
+  if (normalizedPath.startsWith("/") || /^[a-zA-Z]:\//.test(normalizedPath)) {
     throw new Error(`Unsafe EBK path: absolute paths are not allowed: ${path}`);
   }
 
-  if (normalizedPath.includes("../") || normalizedPath.includes("..\\")) {
+  const segments = normalizedPath.split("/");
+
+  if (segments.some((segment) => segment === "..")) {
     throw new Error(`Unsafe EBK path: parent traversal is not allowed: ${path}`);
   }
 
-  if (normalizedPath === ".." || normalizedPath.startsWith("../")) {
-    throw new Error(`Unsafe EBK path: parent traversal is not allowed: ${path}`);
+  const protocolMatch = normalizedPath.match(/^([a-zA-Z][a-zA-Z0-9+.-]*:)/);
+
+  if (protocolMatch) {
+    const protocol = protocolMatch[1].toLowerCase();
+
+    if (BLOCKED_PROTOCOLS.has(protocol)) {
+      throw new Error(`Unsafe EBK path: protocol is not allowed: ${protocol}`);
+    }
+
+    throw new Error(`Unsafe EBK path: URL protocols are not allowed: ${protocol}`);
   }
+
+  let decodedPath = normalizedPath;
 
   try {
-    const url = new URL(normalizedPath);
-
-    if (BLOCKED_PROTOCOLS.includes(url.protocol)) {
-      throw new Error(`Unsafe EBK path: protocol is not allowed: ${url.protocol}`);
-    }
+    decodedPath = decodeURIComponent(normalizedPath);
   } catch {
-    // This is expected for normal relative paths like pages/start.html.
+    throw new Error(`Unsafe EBK path: invalid percent encoding: ${path}`);
+  }
+
+  const decodedSegments = normalizeEbkPath(decodedPath).split("/");
+
+  if (decodedSegments.some((segment) => segment === "..")) {
+    throw new Error(`Unsafe EBK path: encoded parent traversal is not allowed: ${path}`);
   }
 }
 
 export function sanitizeEbkPath(path: string): string {
   assertSafeEbkPath(path);
-
-  return path.replace("\\", "/").trim();
+  return normalizeEbkPath(path);
 }
 
 export function assertSafeAssetSrc(src: string): void {
