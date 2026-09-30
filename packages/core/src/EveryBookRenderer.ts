@@ -1,5 +1,6 @@
 import { EbkPackage } from "./package/EbkPackage";
 import { validateManifest } from "./manifest/ManifestValidator";
+import { validateStory } from "./story/StoryValidator";
 import { bindEveryBookActions } from "./runtime/actions";
 import { StoryEngine } from "./story/StoryEngine";
 import { ConditionEngine } from "./story/ConditionEngine";
@@ -40,7 +41,13 @@ export class EveryBookRenderer {
 
     const story = ebk.getStory();
 
+    // A renderer can open multiple books during its lifetime. Never carry
+    // story state from a previously opened book into the next package.
+    this.storyEngine = null;
+    this.currentPosition = null;
+
     if (story) {
+      validateStory(manifest, story);
       this.storyEngine = new StoryEngine(manifest, story);
 
       if (this.storageKey) {
