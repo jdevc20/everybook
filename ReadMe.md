@@ -27,14 +27,19 @@ EbkPackage
     └─ CSS
     │
     ▼
-EveryBookRenderer
+EveryBookEngine
     │
     ├─ ManifestValidator
     ├─ StoryValidator
     ├─ StoryEngine
     ├─ PageAccessEngine
-    ├─ ConditionEngine
+    └─ ConditionEngine
+    │
+    ▼
+EveryBookRenderer
+    │
     ├─ HTML sanitization
+    ├─ action binding
     └─ Shadow DOM rendering
     │
     ▼
@@ -733,7 +738,7 @@ Important limitations include:
 - conditions use a limited string expression syntax
 - conditional DOM nodes are removed rather than reactively hidden/restored
 - save data does not yet have an explicit migration/version schema
-- the renderer still combines engine orchestration and DOM presentation responsibilities
+- the renderer is now a DOM presentation adapter over a headless `EveryBookEngine`, but event subscriptions and richer renderer adapters are still future work
 - there is no backend or cloud synchronization
 - there is no authoring application
 - there is no EPUB/PDF importer
