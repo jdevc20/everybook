@@ -10,7 +10,7 @@ const BLOCKED_PROTOCOLS = new Set([
 ]);
 
 function normalizeEbkPath(path: string): string {
-  return path.replaceAll("\\", "/").trim();
+  return path.replace(/\\/g, "/").trim();
 }
 
 export function assertSafeEbkPath(path: string): void {
