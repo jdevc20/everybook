@@ -1,10 +1,7 @@
-import { EbkPackage } from "./package/EbkPackage";
-import { validateManifest } from "./manifest/ManifestValidator";
-import { validateStory } from "./story/StoryValidator";
+import { EveryBookEngine } from "./EveryBookEngine";
+import type { EveryBookNavigationResult } from "./EveryBookEngine";
 import { bindEveryBookActions } from "./runtime/actions";
-import { StoryEngine } from "./story/StoryEngine";
 import { ConditionEngine } from "./story/ConditionEngine";
-import { PageAccessEngine } from "./story/PageAccessEngine";
 import { RenderSurface } from "./rendering/RenderSurface";
 import { sanitizeEveryBookHtml } from "./security/sanitizeHtml";
 import type {
@@ -18,270 +15,104 @@ import type {
 } from "./types";
 
 export class EveryBookRenderer {
-  private surface: RenderSurface;
-  private ebkPackage: EbkPackage | null = null;
-  private storyEngine: StoryEngine | null = null;
-  private currentPosition: EveryBookPosition | null = null;
-  private storageKey: string | null = null;
+  private readonly surface: RenderSurface;
+  private readonly engine: EveryBookEngine;
 
   constructor(options: EveryBookRendererOptions) {
     this.surface = new RenderSurface(options.container);
-    this.storageKey = options.storageKey ?? null;
+    this.engine = new EveryBookEngine({
+      storageKey: options.storageKey,
+    });
   }
 
   async open(file: File | Blob | ArrayBuffer): Promise<void> {
-    const ebk = new EbkPackage();
-
-    await ebk.load(file);
-
-    const manifest = ebk.getManifest();
-    validateManifest(manifest);
-
-    this.ebkPackage = ebk;
-
-    const story = ebk.getStory();
-
-    // A renderer can open multiple books during its lifetime. Never carry
-    // story state from a previously opened book into the next package.
-    this.storyEngine = null;
-    this.currentPosition = null;
-
-    if (story) {
-      validateStory(manifest, story);
-      this.storyEngine = new StoryEngine(manifest, story);
-
-      if (this.storageKey) {
-        this.storyEngine.loadFromStorage(this.storageKey);
-      }
-    }
-
-    await this.injectStyles();
-
-    const position = this.storyEngine?.getCurrentPosition() ?? manifest.entry;
-
-    await this.goToPage(position.chapterId, position.pageId);
+    const result = await this.engine.open(file);
+    this.surface.setBookStyles(await this.engine.getBookStyles());
+    await this.presentNavigationResult(result);
   }
 
   async goToPage(chapterId: string, pageId: string): Promise<void> {
-    if (!this.ebkPackage) {
-      throw new Error("No EBK package loaded.");
-    }
-
-    const manifest = this.ebkPackage.getManifest();
-    const target: EveryBookEntry = { chapterId, pageId };
-    const targetPage = this.ebkPackage.findPage(target);
-    const jumpMode = manifest.navigation?.jumpMode ?? "guarded";
-
-    const access = PageAccessEngine.canOpenPage({
-      mode: jumpMode,
-      page: targetPage,
-      state: this.storyEngine?.getState() ?? null,
-      story: this.ebkPackage.getStory(),
-      target,
-    });
-
-    if (!access.allowed) {
-      this.showBlockedPage(access.readerMessage, access.fallback);
-      return;
-    }
-
-    if (access.usedDefaultStoryline && this.storyEngine) {
-      this.storyEngine.markUsedDefaultStoryline();
-      this.storyEngine.applyDefaultVariables();
-    }
-
-    const page = await this.ebkPackage.loadPage(target);
-
-    await this.renderPage(page);
+    await this.presentNavigationResult(
+      await this.engine.goToPage(chapterId, pageId)
+    );
   }
 
   async nextPage(): Promise<void> {
-    if (!this.ebkPackage || !this.currentPosition) {
-      throw new Error("No EBK page is currently loaded.");
-    }
-
-    const manifest = this.ebkPackage.getManifest();
-
-    const chapterIndex = manifest.chapters.findIndex(
-      (chapter) => chapter.id === this.currentPosition?.chapterId
-    );
-
-    if (chapterIndex === -1) {
-      throw new Error("Current chapter not found.");
-    }
-
-    const currentChapter = manifest.chapters[chapterIndex];
-
-    const pageIndex = currentChapter.pages.findIndex(
-      (page) => page.id === this.currentPosition?.pageId
-    );
-
-    if (pageIndex === -1) {
-      throw new Error("Current page not found.");
-    }
-
-    const nextPageInChapter = currentChapter.pages[pageIndex + 1];
-
-    if (nextPageInChapter) {
-      await this.goToPage(currentChapter.id, nextPageInChapter.id);
-      return;
-    }
-
-    const nextChapter = manifest.chapters[chapterIndex + 1];
-
-    if (nextChapter?.pages[0]) {
-      await this.goToPage(nextChapter.id, nextChapter.pages[0].id);
-      return;
-    }
-
-    const endings = this.storyEngine?.getAvailableEndings() ?? [];
-
-    if (endings[0]) {
-      await this.goToPage(endings[0].chapterId, endings[0].pageId);
-      return;
-    }
-
-    console.info("Already at the last page.");
+    await this.presentNavigationResult(await this.engine.nextPage());
   }
 
   async previousPage(): Promise<void> {
-    if (!this.ebkPackage || !this.currentPosition) {
-      throw new Error("No EBK page is currently loaded.");
-    }
-
-    const manifest = this.ebkPackage.getManifest();
-
-    if (manifest.navigation?.allowBacktracking === false) {
-      this.showBlockedPage("Backtracking is disabled for this EveryBook.");
-      return;
-    }
-
-    const chapterIndex = manifest.chapters.findIndex(
-      (chapter) => chapter.id === this.currentPosition?.chapterId
-    );
-
-    if (chapterIndex === -1) {
-      throw new Error("Current chapter not found.");
-    }
-
-    const currentChapter = manifest.chapters[chapterIndex];
-
-    const pageIndex = currentChapter.pages.findIndex(
-      (page) => page.id === this.currentPosition?.pageId
-    );
-
-    if (pageIndex === -1) {
-      throw new Error("Current page not found.");
-    }
-
-    const previousPageInChapter = currentChapter.pages[pageIndex - 1];
-
-    if (previousPageInChapter) {
-      await this.goToPage(currentChapter.id, previousPageInChapter.id);
-      return;
-    }
-
-    const previousChapter = manifest.chapters[chapterIndex - 1];
-
-    if (previousChapter?.pages.length) {
-      const lastPage = previousChapter.pages[previousChapter.pages.length - 1];
-      await this.goToPage(previousChapter.id, lastPage.id);
-      return;
-    }
-
-    console.info("Already at the first page.");
+    await this.presentNavigationResult(await this.engine.previousPage());
   }
 
   async applyChoice(choiceId: string): Promise<void> {
-    if (!this.storyEngine) {
-      throw new Error("No story engine loaded.");
-    }
-
-    const target = this.storyEngine.applyChoice(choiceId);
-
-    this.saveProgress();
-    this.renderStoryDocumentation();
-
-    await this.goToPage(target.chapterId, target.pageId);
+    await this.presentNavigationResult(
+      await this.engine.applyChoice(choiceId)
+    );
   }
 
   getCurrentPosition(): EveryBookPosition | null {
-    return this.currentPosition;
+    return this.engine.getCurrentPosition();
   }
 
   getTableOfContents(): EveryBookChapter[] {
-    if (!this.ebkPackage) {
-      return [];
-    }
-
-    return this.ebkPackage.getChapters();
+    return this.engine.getTableOfContents();
   }
 
   getStoryState(): EveryBookStoryState | null {
-    return this.storyEngine?.getState() ?? null;
+    return this.engine.getStoryState();
   }
 
   getVariable<T = unknown>(key: string): T | undefined {
-    return this.storyEngine?.getVariable<T>(key);
+    return this.engine.getVariable<T>(key);
   }
 
   setVariable(key: string, value: unknown): void {
-    this.storyEngine?.setVariable(key, value);
-    this.saveProgress();
+    this.engine.setVariable(key, value);
+    this.applyConditionalContent();
     this.renderStoryDocumentation();
   }
 
   saveProgress(): void {
-    if (!this.storageKey || !this.storyEngine) {
-      return;
-    }
-
-    this.storyEngine.saveToStorage(this.storageKey);
+    this.engine.saveProgress();
   }
 
   clearProgress(): void {
-    if (!this.storageKey || !this.storyEngine) {
-      return;
-    }
-
-    this.storyEngine.clearStorage(this.storageKey);
+    this.engine.clearProgress();
     this.renderStoryDocumentation();
   }
 
   clear(): void {
+    this.engine.clear();
     this.surface.clear();
-    this.ebkPackage = null;
-    this.storyEngine = null;
-    this.currentPosition = null;
   }
 
-  private async injectStyles(): Promise<void> {
-    if (!this.ebkPackage) return;
-
-    const css = await this.ebkPackage.loadStyles();
-
-    this.surface.setBookStyles(css);
+  getEngine(): EveryBookEngine {
+    return this.engine;
   }
 
-  private async renderPage(page: LoadedPage): Promise<void> {
+  private async presentNavigationResult(
+    result: EveryBookNavigationResult
+  ): Promise<void> {
+    if (result.status === "page") {
+      this.renderPage(result.page);
+      return;
+    }
+
+    if (result.status === "blocked") {
+      this.showBlockedPage(result.message, result.fallback);
+      return;
+    }
+
+    console.info("No further EveryBook page is available.");
+  }
+
+  private renderPage(page: LoadedPage): void {
     const cleanHtml = sanitizeEveryBookHtml(page.html);
 
     this.surface.setContent(cleanHtml);
-
-    this.currentPosition = {
-      chapterId: page.chapterId,
-      pageId: page.pageId,
-      timelineId: page.timelineId,
-    };
-
-    if (this.storyEngine) {
-      this.storyEngine.setCurrentPosition(this.currentPosition);
-    }
-
     this.applyConditionalContent();
     this.bindCurrentPageActions();
-
-    this.saveProgress();
     this.renderStoryDocumentation();
   }
 
@@ -305,7 +136,6 @@ export class EveryBookRenderer {
 
       setVariable: async (key, value) => {
         this.setVariable(key, value);
-        this.applyConditionalContent();
       },
     });
   }
@@ -345,11 +175,11 @@ export class EveryBookRenderer {
   }
 
   private applyConditionalContent(): void {
-    if (!this.storyEngine) {
+    const state = this.engine.getStoryState();
+
+    if (!state) {
       return;
     }
-
-    const state = this.storyEngine.getState();
 
     const conditionalElements =
       this.surface.contentRoot.querySelectorAll<HTMLElement>("[data-ebk-if]");
@@ -365,15 +195,16 @@ export class EveryBookRenderer {
   }
 
   private renderStoryDocumentation(): void {
-    if (!this.storyEngine || !this.ebkPackage) {
+    const state = this.engine.getStoryState();
+
+    if (!state) {
       this.surface.clearFooter();
       return;
     }
 
-    const state = this.storyEngine.getState();
-
-    const currentTitle = this.currentPosition
-      ? this.getReadablePosition(this.currentPosition)
+    const currentPosition = this.engine.getCurrentPosition();
+    const currentTitle = currentPosition
+      ? this.getReadablePosition(currentPosition)
       : "No page loaded";
 
     const choicesHtml = this.renderChoiceDocumentation(state.choices);
@@ -499,8 +330,9 @@ export class EveryBookRenderer {
   }
 
   private getChoiceLabel(choiceId: string): string {
-    const story = this.storyEngine?.getStory();
-    const choice = story?.choices?.find((item) => item.id === choiceId);
+    const choice = this.engine
+      .getStory()
+      ?.choices?.find((item) => item.id === choiceId);
 
     return choice?.label ?? choiceId;
   }
@@ -509,7 +341,7 @@ export class EveryBookRenderer {
     chapterId: string;
     pageId: string;
   }): string {
-    const manifest = this.ebkPackage?.getManifest();
+    const manifest = this.engine.getManifest();
 
     if (!manifest) {
       return `${position.chapterId} / ${position.pageId}`;
@@ -530,11 +362,11 @@ export class EveryBookRenderer {
 
 function escapeHtml(value: string): string {
   return value
-    .replace("&", "&amp;")
-    .replace("<", "&lt;")
-    .replace(">", "&gt;")
-    .replace('"', "&quot;")
-    .replace("'", "&#039;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function formatValue(value: unknown): string {
