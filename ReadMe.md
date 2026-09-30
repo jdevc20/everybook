@@ -1,53 +1,102 @@
-# EveryBook Core
+# EveryBook
 
-`@everybook/core` is the rendering engine for the EveryBook project.
+**EveryBook** is an experimental interactive-book engine for the browser.
 
-It opens `.ebk` files, reads their manifest, loads chapters and pages, applies styles, sanitizes HTML, manages interactive story state, and renders books into a Shadow DOM container.
+The project defines a portable `.ebk` package format and a TypeScript runtime that can load books, render HTML content, manage story state, enforce navigation rules, and support branching choices, variables, conditions, and endings.
 
-EveryBook Core is the foundation for future EveryBook apps:
+The repository currently contains:
 
-```text
-EveryBook Core
-├─ Web Reader (examples/react-reader — working demo)
-├─ Android Reader
-├─ Desktop Reader
-├─ EveryBook Writer
-└─ CLI Tools
-```
+- **`@everybook/core`** — the TypeScript engine
+- **React Reader** — a Vite/React example application
+
+EveryBook is currently a prototype. It does **not** yet include a backend, cloud sync, marketplace, desktop writer, mobile application, or production-grade media asset resolver.
 
 ---
 
-## What is an `.ebk` File?
-
-An `.ebk` file is a ZIP archive renamed to `.ebk`.
-
-It contains:
-
-- `manifest.json` — book metadata, chapter/page structure, entry point, navigation rules, permissions
-- `story/story.json` (optional) — interactive story definition: choices, variables, timelines, endings
-- HTML page files
-- CSS stylesheets
-- Images, audio, video
-
-The ZIP root must contain `manifest.json` directly:
+## Core Architecture
 
 ```text
-hello-world.ebk/manifest.json   ✓ correct
-hello-world.ebk/hello-world/manifest.json   ✗ wrong
+.ebk package
+    │
+    ▼
+EbkPackage
+    │
+    ├─ manifest.json
+    ├─ optional story JSON
+    ├─ HTML pages
+    └─ CSS
+    │
+    ▼
+EveryBookRenderer
+    │
+    ├─ ManifestValidator
+    ├─ StoryValidator
+    ├─ StoryEngine
+    ├─ PageAccessEngine
+    ├─ ConditionEngine
+    ├─ HTML sanitization
+    └─ Shadow DOM rendering
+    │
+    ▼
+Browser reader
 ```
+
+The engine is responsible for both package loading and interactive story behavior.
 
 ---
 
-## Monorepo Structure
+## Features
+
+### Book loading
+
+EveryBook can:
+
+- open `.ebk` files from a `File`, `Blob`, or `ArrayBuffer`
+- load and parse `manifest.json`
+- load optional story definitions
+- load page HTML and CSS
+- validate declared package paths
+- render pages into an isolated Shadow DOM
+
+### Interactive stories
+
+The engine supports:
+
+- chapters and pages
+- story variables
+- choices
+- choice effects
+- multiple timelines
+- conditional content
+- multiple endings
+- visited pages
+- unlocked pages
+- page access rules
+- optional local progress persistence
+
+### Navigation modes
+
+EveryBook currently supports:
+
+| Mode | Behavior |
+|---|---|
+| `free` | Allows flexible navigation and may apply default story assumptions when earlier story state is missing. |
+| `guarded` | Allows navigation but enforces explicit page requirements. |
+| `storyStrict` | Only allows pages that have already been visited or explicitly unlocked. |
+
+---
+
+## Repository Structure
 
 ```text
 everybook/
-├─ package.json
-├─ pnpm-workspace.yaml
+├─ .github/
+│  └─ workflows/
+│     └─ core-ci.yml
 ├─ packages/
 │  └─ core/
 │     ├─ package.json
-│     ├─ tsconfig.json
+│     ├─ tests/
 │     └─ src/
 │        ├─ index.ts
 │        ├─ types.ts
@@ -66,42 +115,88 @@ everybook/
 │        └─ story/
 │           ├─ StoryEngine.ts
 │           ├─ StoryState.ts
+│           ├─ StoryValidator.ts
 │           ├─ ConditionEngine.ts
 │           └─ PageAccessEngine.ts
 └─ examples/
-   └─ react-reader/   ← working React + Vite demo
+   └─ react-reader/
 ```
 
 ---
 
-## Installation in Workspace
+## What is an `.ebk` file?
 
-```bash
-pnpm add @everybook/core@workspace:*
-```
+An `.ebk` file is currently a ZIP-based EveryBook package.
 
----
-
-## Build Commands
-
-```bash
-# From root
-pnpm --filter @everybook/core build
-pnpm build:core
-
-# From packages/core
-pnpm build
-```
-
-Successful build output:
+At minimum:
 
 ```text
-packages/core/dist/
-├─ index.js
-├─ index.cjs
-├─ index.d.ts
-└─ index.d.cts
+my-book.ebk
+├─ manifest.json
+└─ pages/
+   └─ start.html
 ```
+
+A story-enabled package can look like:
+
+```text
+my-book.ebk
+├─ manifest.json
+├─ story/
+│  └─ story.json
+├─ pages/
+│  ├─ start.html
+│  └─ forest.html
+└─ styles/
+   └─ book.css
+```
+
+The ZIP root must contain `manifest.json` directly.
+
+Correct:
+
+```text
+manifest.json
+pages/start.html
+```
+
+Incorrect:
+
+```text
+my-book/manifest.json
+my-book/pages/start.html
+```
+
+---
+
+## Setup
+
+Requirements:
+
+- Node.js
+- pnpm
+
+From the repository root:
+
+```bash
+pnpm install
+pnpm --filter @everybook/core build
+pnpm --filter react-reader dev
+```
+
+Build Core only:
+
+```bash
+pnpm build:core
+```
+
+Run Core regression tests:
+
+```bash
+pnpm --filter @everybook/core test
+```
+
+Core CI also runs automatically for relevant pull requests and pushes to `main`.
 
 ---
 
@@ -112,76 +207,47 @@ import { EveryBookRenderer } from "@everybook/core";
 
 const renderer = new EveryBookRenderer({
   container: "#reader",
-  storageKey: "everybook:my-book"   // optional: enables localStorage save/load
+  storageKey: "everybook"
 });
 
-const fileInput = document.querySelector<HTMLInputElement>("#fileInput");
-
-fileInput?.addEventListener("change", async () => {
-  const file = fileInput.files?.[0];
-  if (!file) return;
-  await renderer.open(file);
-});
+await renderer.open(file);
 ```
 
----
+Navigation:
 
-## React Usage Example
+```ts
+await renderer.nextPage();
+await renderer.previousPage();
 
-```tsx
-import { useRef, useState } from "react";
-import { EveryBookRenderer } from "@everybook/core";
-import type { EveryBookChapter, EveryBookPosition } from "@everybook/core";
-
-export default function EveryBookReader() {
-  const readerRef = useRef<HTMLDivElement | null>(null);
-  const rendererRef = useRef<EveryBookRenderer | null>(null);
-  const [position, setPosition] = useState<EveryBookPosition | null>(null);
-  const [toc, setToc] = useState<EveryBookChapter[]>([]);
-
-  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file || !readerRef.current) return;
-
-    const renderer = new EveryBookRenderer({
-      container: readerRef.current,
-      storageKey: `everybook:${file.name}`,
-    });
-
-    rendererRef.current = renderer;
-    await renderer.open(file);
-    setToc(renderer.getTableOfContents());
-    setPosition(renderer.getCurrentPosition());
-  }
-
-  async function handleNext() {
-    await rendererRef.current?.nextPage();
-    setPosition(rendererRef.current?.getCurrentPosition() ?? null);
-  }
-
-  async function handlePrevious() {
-    await rendererRef.current?.previousPage();
-    setPosition(rendererRef.current?.getCurrentPosition() ?? null);
-  }
-
-  return (
-    <main>
-      <input type="file" accept=".ebk" onChange={handleFileChange} />
-      <button onClick={handlePrevious}>Previous</button>
-      <button onClick={handleNext}>Next</button>
-      <div ref={readerRef} id="reader" />
-    </main>
-  );
-}
+await renderer.goToPage(
+  "chapter-1",
+  "page-2"
+);
 ```
 
-The working full-featured demo lives in `examples/react-reader/`.
+Story access:
+
+```ts
+const position = renderer.getCurrentPosition();
+const state = renderer.getStoryState();
+
+const coins = renderer.getVariable<number>("coins");
+
+renderer.setVariable("hasKey", true);
+```
+
+Progress:
+
+```ts
+renderer.saveProgress();
+renderer.clearProgress();
+```
 
 ---
 
 ## Manifest Format
 
-`manifest.json`:
+Example `manifest.json`:
 
 ```json
 {
@@ -189,20 +255,30 @@ The working full-featured demo lives in `examples/react-reader/`.
   "format": "everybook",
   "version": "0.1.0",
   "title": "Hello EveryBook",
-  "author": "Your Name",
+  "author": "Example Author",
   "entry": {
     "chapterId": "chapter-1",
     "pageId": "start"
   },
   "story": "story/story.json",
-  "styles": ["styles/book.css"],
+  "styles": [
+    "styles/book.css"
+  ],
   "chapters": [
     {
       "id": "chapter-1",
       "title": "The First Door",
       "pages": [
-        { "id": "start", "title": "Start", "src": "pages/start.html" },
-        { "id": "forest", "title": "The Forest", "src": "pages/forest.html" }
+        {
+          "id": "start",
+          "title": "Start",
+          "src": "pages/start.html"
+        },
+        {
+          "id": "forest",
+          "title": "The Forest",
+          "src": "pages/forest.html"
+        }
       ]
     }
   ],
@@ -211,57 +287,48 @@ The working full-featured demo lives in `examples/react-reader/`.
     "allowBacktracking": true
   },
   "permissions": {
-    "audio": false,
-    "video": false,
     "network": false,
     "storage": true
   }
 }
 ```
 
-### Manifest Fields
+### Manifest validation
 
-| Field | Required | Description |
-|---|:---:|---|
-| `id` | Yes | Unique book identifier |
-| `format` | Yes | Must be `"everybook"` |
-| `version` | Yes | EveryBook format version |
-| `title` | Yes | Book title |
-| `entry` | Yes | Starting `{ chapterId, pageId }` |
-| `chapters` | Yes | Array of chapters, each with `id`, `title`, and `pages` |
-| `author` | No | Book author name |
-| `language` | No | Language code (e.g. `"en"`) |
-| `description` | No | Short book description |
-| `cover` | No | Path to cover image inside the package |
-| `story` | No | Path to `story.json` inside the package |
-| `styles` | No | CSS files to load |
-| `navigation` | No | Navigation rules (`jumpMode`, `allowBacktracking`, `defaultEntry`) |
-| `permissions` | No | Permission flags (`audio`, `video`, `network`, `storage`) |
+The engine validates:
 
-### Navigation Modes (`jumpMode`)
+- required manifest fields
+- book ID
+- unique chapter IDs
+- unique page IDs within each chapter
+- entry targets
+- `navigation.defaultEntry`
+- page fallback targets
+- `visitedPage` requirement targets
+- unsupported network permission
+- declared package paths
 
-| Mode | Behavior |
-|---|---|
-| `free` | Reader can jump anywhere. If page requirements fail, default story variables are applied. |
-| `guarded` | Reader can jump to most pages, but pages with `access.requirements` are protected. |
-| `storyStrict` | Reader can only open pages they have already visited or that were explicitly unlocked. |
+Invalid references fail when the book is opened instead of failing later during navigation.
 
 ---
 
 ## Story Format
 
-When `manifest.story` points to a JSON file inside the package, the story engine is activated.
-
-`story/story.json`:
+Example `story/story.json`:
 
 ```json
 {
   "version": "0.1.0",
-  "start": { "chapterId": "chapter-1", "pageId": "start" },
+  "start": {
+    "chapterId": "chapter-1",
+    "pageId": "start"
+  },
   "mainTimeline": "main",
   "timelines": [
-    { "id": "main", "title": "Main Story" },
-    { "id": "dark-route", "title": "The Dark Path" }
+    {
+      "id": "main",
+      "title": "Main Story"
+    }
   ],
   "variables": {
     "coins": 0,
@@ -271,38 +338,110 @@ When `manifest.story` points to a JSON file inside the package, the story engine
     {
       "id": "enter-forest",
       "label": "Enter the forest",
-      "goTo": { "chapterId": "chapter-1", "pageId": "forest" },
+      "from": {
+        "chapterId": "chapter-1",
+        "pageId": "start"
+      },
       "effects": [
-        { "type": "setVariable", "key": "hasKey", "value": true },
-        { "type": "incrementVariable", "key": "coins", "value": 5 }
-      ]
-    }
-  ],
-  "endings": [
-    {
-      "id": "good-ending",
-      "title": "The Good Ending",
-      "condition": "hasKey",
-      "page": { "chapterId": "chapter-2", "pageId": "victory" }
+        {
+          "type": "setVariable",
+          "key": "hasKey",
+          "value": true
+        }
+      ],
+      "goTo": {
+        "chapterId": "chapter-1",
+        "pageId": "forest"
+      }
     }
   ]
 }
 ```
 
-### Choice Effects
+### Story validation
 
-| Effect type | Description |
+`StoryValidator` checks:
+
+- story version
+- story start target
+- timeline IDs
+- `mainTimeline`
+- duplicate choice IDs
+- choice source pages
+- choice destinations
+- timeline-changing effects
+- ending IDs and pages
+- `defaultPath` entries
+- page timeline references
+
+---
+
+## Choices
+
+A choice can:
+
+- navigate to another page
+- set a variable
+- increment a numeric variable
+- change timeline
+- remember another choice
+
+Example:
+
+```json
+{
+  "id": "take-coins",
+  "label": "Take the coins",
+  "from": {
+    "chapterId": "chapter-1",
+    "pageId": "treasure-room"
+  },
+  "effects": [
+    {
+      "type": "incrementVariable",
+      "key": "coins",
+      "value": 10
+    }
+  ],
+  "goTo": {
+    "chapterId": "chapter-1",
+    "pageId": "exit"
+  }
+}
+```
+
+### Choice replay behavior
+
+Choices are **non-repeatable by default**.
+
+Once a choice has been applied, its effects cannot be applied again unless the choice explicitly declares:
+
+```json
+{
+  "repeatable": true
+}
+```
+
+This prevents accidental repeated effects such as adding coins multiple times from the same one-time choice.
+
+If `from` is defined, the choice can only be applied from that story position.
+
+---
+
+## Choice Effects
+
+| Effect | Description |
 |---|---|
-| `setVariable` | Sets a story variable to a value |
-| `incrementVariable` | Adds a number to a numeric variable |
-| `setTimeline` | Switches the active story timeline |
-| `rememberChoice` | Records an additional choice ID alongside the current one |
+| `setVariable` | Assigns a value to a story variable. |
+| `incrementVariable` | Adds a number to a numeric variable. |
+| `setTimeline` | Changes the active story timeline. |
+| `rememberChoice` | Records another choice ID as part of story state. |
 
 ---
 
 ## Page Access Rules
 
-Pages can define `access` rules in the manifest to control when they can be opened:
+Pages can define requirements in the manifest.
 
 ```json
 {
@@ -310,114 +449,121 @@ Pages can define `access` rules in the manifest to control when they can be open
   "src": "pages/secret-room.html",
   "access": {
     "requirements": [
-      { "type": "choiceMade", "choiceId": "find-key" },
-      { "type": "variableEquals", "key": "hasKey", "value": true }
+      {
+        "type": "choiceMade",
+        "choiceId": "find-key"
+      },
+      {
+        "type": "variableEquals",
+        "key": "hasKey",
+        "value": true
+      }
     ],
-    "fallback": { "chapterId": "chapter-1", "pageId": "locked-door" },
+    "fallback": {
+      "chapterId": "chapter-1",
+      "pageId": "locked-door"
+    },
     "lockedMessage": "You need the key to enter this room."
   }
 }
 ```
 
-### Requirement Types
+Supported requirements:
 
-| Type | Description |
+| Type | Meaning |
 |---|---|
-| `choiceMade` | Reader must have made a specific choice |
-| `variableExists` | A story variable must be present |
-| `variableEquals` | A story variable must equal a specific value |
-| `visitedPage` | A specific chapter/page must already have been visited |
+| `choiceMade` | A specific choice must already exist in story state. |
+| `variableExists` | A variable must exist. |
+| `variableEquals` | A variable must strictly equal the configured value. |
+| `visitedPage` | A specific page must already have been visited. |
 
 ---
 
-## Example Page HTML
+## EveryBook Page Actions
 
-`pages/start.html`:
-
-```html
-<section class="page">
-  <h1>The First Door</h1>
-  <p>You wake up in front of two paths.</p>
-
-  <button data-ebk-action="choice" data-choice-id="enter-forest">
-    Enter the forest
-  </button>
-
-  <button data-ebk-action="nextPage">
-    Continue reading
-  </button>
-
-  <p data-ebk-if="hasKey">You have the key.</p>
-</section>
-```
-
----
-
-## EveryBook Actions
-
-Actions are triggered by `data-ebk-action` on any HTML element.
-No raw JavaScript is needed or allowed inside page HTML.
-
-| Action | Required attributes | Description |
-|---|---|---|
-| `nextPage` | — | Go to the next page in sequence |
-| `previousPage` or `back` | — | Go to the previous page |
-| `goToPage` | `data-chapter-id`, `data-page-id` | Jump to a specific chapter/page |
-| `choice` | `data-choice-id` | Apply a story choice and navigate to its target |
-| `setVariable` | `data-key`, `data-value` | Set a story variable directly |
-
-Examples:
+EveryBook page HTML uses controlled `data-ebk-action` attributes rather than arbitrary JavaScript.
 
 ```html
-<button data-ebk-action="nextPage">Next</button>
-
-<button data-ebk-action="previousPage">Back</button>
-
-<button data-ebk-action="goToPage" data-chapter-id="chapter-2" data-page-id="bridge">
-  Cross the bridge
+<button data-ebk-action="nextPage">
+  Continue
 </button>
 
-<button data-ebk-action="choice" data-choice-id="take-sword">
+<button
+  data-ebk-action="choice"
+  data-choice-id="take-sword"
+>
   Take the sword
 </button>
 
-<button data-ebk-action="setVariable" data-key="doorOpen" data-value="true">
-  Open the door
+<button
+  data-ebk-action="goToPage"
+  data-chapter-id="chapter-2"
+  data-page-id="bridge"
+>
+  Cross the bridge
 </button>
 ```
 
+Supported actions:
+
+| Action | Purpose |
+|---|---|
+| `nextPage` | Open the next page. |
+| `previousPage` / `back` | Open the previous page. |
+| `goToPage` | Navigate to a specific chapter/page. |
+| `choice` | Apply a story choice. |
+| `setVariable` | Change a story variable. |
+
 ---
 
-## Conditional Content
+## Conditions
 
-Elements with `data-ebk-if` are shown or hidden based on story variables.
-The expression is evaluated by `ConditionEngine` against the current story state.
+Current condition syntax is intentionally small.
 
-```html
-<p data-ebk-if="hasKey">You have the key.</p>
-<p data-ebk-if="!hasKey">The door is locked.</p>
-<p data-ebk-if="coins >= 10">You can afford the item.</p>
-<p data-ebk-if="ending == 'good'">You chose wisely.</p>
+Supported examples:
+
+```text
+hasKey
+!hasKey
+coins >= 10
+health < 50
+ending == 'good'
+status != 'dead'
 ```
 
-### Condition Syntax
+Malformed or unsupported conditions fail safely.
 
-| Format | Example | Description |
-|---|---|---|
-| Variable truthy | `hasKey` | True when variable is truthy |
-| Variable falsy | `!hasKey` | True when variable is falsy |
-| Equality | `ending == 'good'` | Strict equality |
-| Inequality | `status != 'dead'` | Strict inequality |
-| Numeric comparison | `coins >= 10` | Greater than or equal |
-| Numeric comparison | `health < 50` | Less than |
+Invalid numeric comparisons also fail safely instead of silently coercing invalid values to zero.
+
+More expressive structured conditions are a future improvement.
 
 ---
 
-## HTML Sanitization
+## Conditional HTML
 
-All page HTML is sanitized with DOMPurify before rendering.
+Book pages can conditionally display content using `data-ebk-if`.
 
-Allowed tags:
+```html
+<p data-ebk-if="hasKey">
+  You have the key.
+</p>
+
+<p data-ebk-if="coins >= 10">
+  You can afford the item.
+</p>
+```
+
+Conditional elements that fail their condition are currently removed from the rendered DOM.
+
+Because of that, changing a variable later does not restore a previously removed element without rendering the page again.
+
+---
+
+## HTML Security
+
+Page HTML is sanitized using DOMPurify.
+
+Examples of allowed elements include:
 
 ```text
 h1 h2 h3 h4 h5 h6
@@ -429,51 +575,57 @@ ul ol li
 br blockquote hr
 ```
 
-Allowed attributes:
+Dangerous elements such as these are blocked:
 
 ```text
-src alt controls class id title
-data-ebk-action data-target data-chapter-id data-page-id
-data-choice-id data-key data-value data-ebk-if
+script
+iframe
+object
+embed
+form
+input
+textarea
+select
+link
+meta
+base
 ```
 
-Blocked:
+Inline event handlers and inline `style` attributes are also blocked.
 
-```text
-script iframe object embed form
-input textarea select link meta base
-onclick onload onerror onmouseover onfocus onblur style
-```
+The Shadow DOM provides style isolation, but it should **not** be treated as a complete security sandbox.
 
 ---
 
-## Shadow DOM Rendering
+## Package Path Security
 
-The renderer mounts all book content inside a Shadow DOM attached to the container element.
+Paths inside an `.ebk` are validated before use.
 
-This means:
+The current validator rejects:
 
-- Book styles are scoped and cannot leak into the host page
-- Host page styles cannot accidentally affect the book
-- The renderer is self-contained and safe to embed anywhere
+- absolute paths
+- Windows drive paths
+- parent traversal such as `../`
+- encoded parent traversal such as `%2e%2e`
+- URL schemes
+- `http:`
+- `https:`
+- `javascript:`
+- `data:`
+- `blob:`
+- `file:`
+- `ftp:`
+- `mailto:`
+- malformed percent encoding
+- null-byte paths
+
+Windows-style backslashes are normalized before validation.
 
 ---
 
-## Path Security
+## Progress Storage
 
-All file paths referenced inside `.ebk` files are validated before use.
-
-Blocked paths:
-
-- Absolute paths starting with `/`
-- Path traversal using `../`
-- URLs with blocked protocols: `http:`, `https:`, `javascript:`, `data:`, `blob:`, `file:`, `ftp:`, `mailto:`
-
----
-
-## Progress Save and Load
-
-When `storageKey` is set, the renderer automatically saves story state to `localStorage` after each page navigation or choice.
+When a `storageKey` is configured, story state is stored in browser `localStorage`.
 
 ```ts
 const renderer = new EveryBookRenderer({
@@ -482,213 +634,193 @@ const renderer = new EveryBookRenderer({
 });
 ```
 
-The storage key is namespaced internally as `storageKey:bookId:state`.
+The internal key is namespaced by book ID:
 
-Progress can be cleared with:
-
-```ts
-renderer.clearProgress();
+```text
+everybook:<bookId>:state
 ```
+
+Stored story state currently includes:
+
+- current page
+- current timeline
+- variables
+- remembered choices
+- visited pages
+- unlocked pages
+- default-storyline usage
+
+Opening another book now resets the active story engine so state cannot leak from the previously opened book.
 
 ---
 
-## Renderer API
+## Public API
+
+Main exports include:
 
 ```ts
-// Open an .ebk file (File, Blob, or ArrayBuffer)
+EveryBookRenderer
+StoryEngine
+StoryState
+ConditionEngine
+
+validateManifest
+validateStory
+assertSafeEbkPath
+sanitizeEbkPath
+```
+
+Primary renderer methods:
+
+```ts
 await renderer.open(file);
 
-// Navigate pages
 await renderer.nextPage();
 await renderer.previousPage();
 await renderer.goToPage(chapterId, pageId);
 
-// Apply a story choice
 await renderer.applyChoice(choiceId);
 
-// Read state
-renderer.getCurrentPosition();     // EveryBookPosition | null
-renderer.getTableOfContents();     // EveryBookChapter[]
-renderer.getStoryState();          // EveryBookStoryState | null
-renderer.getVariable<T>(key);      // T | undefined
+renderer.getCurrentPosition();
+renderer.getTableOfContents();
+renderer.getStoryState();
 
-// Set a variable (also saves progress and re-evaluates conditional content)
+renderer.getVariable(key);
 renderer.setVariable(key, value);
 
-// Save / clear progress
 renderer.saveProgress();
 renderer.clearProgress();
 
-// Clear the renderer
 renderer.clear();
 ```
 
 ---
 
-## Source Files
+## Testing
 
-| File | Responsibility |
-|---|---|
-| `index.ts` | Public API exports |
-| `types.ts` | All shared TypeScript types |
-| `EveryBookRenderer.ts` | Main orchestration class |
-| `manifest/ManifestValidator.ts` | Validates manifest structure and required fields |
-| `package/EbkPackage.ts` | Reads the ZIP, loads manifest, pages, styles, story |
-| `rendering/RenderSurface.ts` | Manages Shadow DOM, content, footer, and book styles |
-| `runtime/actions.ts` | Binds `data-ebk-action` elements to renderer handlers |
-| `security/sanitizeHtml.ts` | DOMPurify-based HTML sanitizer |
-| `security/pathSecurity.ts` | Validates and sanitizes file paths |
-| `story/StoryEngine.ts` | Controls choices, variables, timelines, save/load |
-| `story/StoryState.ts` | Stores and manages the reader's mutable story progress |
-| `story/ConditionEngine.ts` | Evaluates condition expressions against story variables |
-| `story/PageAccessEngine.ts` | Enforces page access rules across all navigation modes |
+The Core package contains regression coverage for the engine hardening work.
 
----
+Tests cover areas including:
 
-## Root Workspace Setup
+- unsafe package paths
+- traversal attempts
+- duplicate page IDs
+- invalid manifest references
+- invalid story destinations
+- duplicate story references
+- repeated choices
+- `choice.from` enforcement
+- malformed numeric conditions
 
-`package.json`:
-
-```json
-{
-  "name": "everybook",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build": "pnpm -r build",
-    "build:core": "pnpm --filter @everybook/core build",
-    "dev:core": "pnpm --filter @everybook/core dev"
-  },
-  "devDependencies": {
-    "typescript": "^5.0.0",
-    "tsup": "^8.0.0"
-  }
-}
-```
-
-`pnpm-workspace.yaml`:
-
-```yaml
-packages:
-  - "packages/*"
-  - "examples/*"
-```
-
----
-
-## Core Package Setup
-
-`packages/core/package.json`:
-
-```json
-{
-  "name": "@everybook/core",
-  "version": "0.1.0",
-  "type": "module",
-  "main": "dist/index.cjs",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": ["dist"],
-  "scripts": {
-    "build": "tsup ./src/index.ts --format esm,cjs --dts --tsconfig tsconfig.json",
-    "dev": "tsup ./src/index.ts --format esm,cjs --dts --watch --tsconfig tsconfig.json"
-  },
-  "dependencies": {
-    "dompurify": "^3.0.0",
-    "jszip": "^3.10.0"
-  },
-  "devDependencies": {
-    "tsup": "^8.0.0",
-    "typescript": "^5.0.0"
-  }
-}
-```
-
----
-
-## Common Errors
-
-### Import is red in the editor
-
-1. Make sure the consuming package has `"@everybook/core": "workspace:*"` in its dependencies.
-2. Make sure `pnpm-workspace.yaml` includes both `packages/*` and `examples/*`.
-3. Run `pnpm install` and `pnpm --filter @everybook/core build` from the root.
-4. Restart the TypeScript server in VS Code.
-
-### No projects matched the filters
-
-The package name in the filter must exactly match the `"name"` field in `package.json`.
+Run:
 
 ```bash
-pnpm --filter react-reader dev   # correct if name is "react-reader"
+pnpm --filter @everybook/core test
 ```
 
-### DTS build error
-
-Ensure `tsconfig.json` includes:
-
-```json
-{
-  "compilerOptions": {
-    "lib": ["ES2020", "DOM"],
-    "moduleResolution": "Bundler",
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "skipLibCheck": true
-  }
-}
-```
+GitHub Actions runs the Core build and tests for relevant changes.
 
 ---
 
-## Roadmap
+## Current Limitations
 
-### Version 0.1.0 — Core Renderer ✓
+EveryBook is still under active development.
 
-- Open `.ebk` ZIP files
-- Read and validate `manifest.json`
-- Chapter and page structure
-- Entry page rendering
-- CSS loading and scoped Shadow DOM injection
-- HTML sanitization with DOMPurify
-- Path security validation
-- Controlled `data-ebk-action` system
-- `nextPage`, `previousPage`, `goToPage`, `choice`, `setVariable` actions
-- Story engine: choices, variables, timelines, endings
-- `free`, `guarded`, and `storyStrict` navigation modes
-- Page access requirements: `choiceMade`, `variableExists`, `variableEquals`, `visitedPage`
-- Conditional content with `data-ebk-if`
-- `ConditionEngine` for expression evaluation
-- localStorage save/load/clear
-- Story notes footer (choices, variables, visited pages)
-- React reader demo
+Important limitations include:
 
-### Version 0.2.0
+- package media files do not yet have a full object-URL asset resolver
+- CSS resource URLs are not yet comprehensively rewritten or sandboxed
+- conditions use a limited string expression syntax
+- conditional DOM nodes are removed rather than reactively hidden/restored
+- save data does not yet have an explicit migration/version schema
+- the renderer still combines engine orchestration and DOM presentation responsibilities
+- there is no backend or cloud synchronization
+- there is no authoring application
+- there is no EPUB/PDF importer
+- there is no CLI
+- there is no marketplace
+- there is no native mobile reader
 
-- Image, audio, video asset support within the package
-- Better error messages
-- Chapter history and backtracking improvements
+---
 
-### Version 0.3.0
+## Next Engine Priorities
 
-- Simple dialogs
-- More condition operators
+### Engine events
 
-### Version 0.4.0
+Add subscriptions such as:
 
-- CLI tools: `everybook validate`, `everybook build`, `everybook create`
+```ts
+engine.on("pageChanged", handler);
+engine.on("choiceMade", handler);
+engine.on("variableChanged", handler);
+```
 
-### Version 0.5.0
+This will make React and other clients easier to synchronize with engine state.
 
-- Android reader proof of concept
-- WebView-based reader
-- Local `.ebk` opening on device
+### Structured conditions
+
+Move toward machine-readable conditions instead of increasingly complex expression strings.
+
+Example direction:
+
+```json
+{
+  "all": [
+    {
+      "variable": "hasKey",
+      "equals": true
+    },
+    {
+      "variable": "coins",
+      "gte": 10
+    }
+  ]
+}
+```
+
+### Asset resolver
+
+Add safe package asset loading for:
+
+- images
+- audio
+- video
+- fonts
+
+with object URL lifecycle management.
+
+### Engine / renderer separation
+
+Long term, the target architecture is:
+
+```text
+               .ebk
+                │
+                ▼
+        EveryBookEngine
+        ├─ Package
+        ├─ Navigation
+        ├─ Story
+        ├─ State
+        ├─ Conditions
+        ├─ Assets
+        └─ Events
+                │
+                ▼
+        Renderer Adapter
+        ├─ Browser
+        ├─ React
+        └─ Future clients
+```
+
+The goal is for story and navigation logic to remain independent from any single UI framework.
 
 ---
 
 ## Design Principle
 
-EveryBook is a programmable book format, not a website inside a ZIP.
+> **EveryBook is a programmable book format, not a website inside a ZIP.**
 
-The renderer controls the book experience. The `.ebk` file is portable. The core is reusable across platforms.
+The package should remain portable, deterministic, and controlled by the engine.
+
+The long-term goal is a reusable interactive publishing runtime that can support different readers and platforms without changing the book format.
