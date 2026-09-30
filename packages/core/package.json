@@ -5,13 +5,14 @@
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
-
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup ./src/index.ts --format esm,cjs --dts --tsconfig tsconfig.json",
-    "dev": "tsup ./src/index.ts --format esm,cjs --dts --watch --tsconfig tsconfig.json"
+    "dev": "tsup ./src/index.ts --format esm,cjs --dts --watch --tsconfig tsconfig.json",
+    "test": "pnpm build && node --test tests/*.test.mjs"
   },
-
   "dependencies": {
     "dompurify": "^3.0.0",
     "jszip": "^3.10.0"

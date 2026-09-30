@@ -1,0 +1,13 @@
+<section class="page story-page">
+  <p class="kicker">The Bell Tower</p>
+  <h1>The Tower Door</h1>
+  <p>The last bell waits above you. Dawn will come only when someone chooses what the lantern is for.</p>
+  <div data-ebk-if="courage >= 1">
+    <p>You remember the forest and the fear you walked through.</p>
+    <button data-ebk-action="choice" data-choice-id="ring-bell">Climb the stairs and ring the bell</button>
+  </div>
+  <div data-ebk-if="helpedTraveler">
+    <p>The traveler looks toward the road home.</p>
+    <button data-ebk-action="choice" data-choice-id="guide-traveler">Give the lantern to the traveler</button>
+  </div>
+</section>

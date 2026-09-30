@@ -130,7 +130,9 @@ export type EveryBookRendererOptions = {
   storageKey?: string;
 };
 
-export type EveryBookEngineOptions = EveryBookRendererOptions;
+export type EveryBookEngineOptions = {
+  storageKey?: string;
+};
 
 export type LoadedPage = {
   chapterId: string;
@@ -163,6 +165,8 @@ export type EveryBookChoiceEffect =
 export type EveryBookChoice = {
   id: string;
   label: string;
+  /** Allow the same choice effects to be applied more than once. Defaults to false. */
+  repeatable?: boolean;
   from?: EveryBookPosition;
   condition?: string;
   effects?: EveryBookChoiceEffect[];

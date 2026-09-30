@@ -1,3 +1,8 @@
+export { validateManifest } from "./manifest/ManifestValidator";
+export { validateStory } from "./story/StoryValidator";
+export { assertSafeEbkPath, sanitizeEbkPath } from "./security/pathSecurity";
+export { EveryBookEngine } from "./EveryBookEngine";
+export type { EveryBookNavigationResult } from "./EveryBookEngine";
 export { EveryBookRenderer } from "./EveryBookRenderer";
 export { StoryEngine } from "./story/StoryEngine";
 export { StoryState } from "./story/StoryState";
@@ -10,6 +15,7 @@ export type {
   EveryBookEntry,
   EveryBookPosition,
   EveryBookRendererOptions,
+  EveryBookEngineOptions,
   EveryBookStory,
   EveryBookChoice,
   EveryBookChoiceEffect,

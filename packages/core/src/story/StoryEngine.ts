@@ -386,6 +386,22 @@ export class StoryEngine {
 
     const current = this.state.getCurrentPosition();
 
+    if (
+      choice.from &&
+      (choice.from.chapterId !== current.chapterId ||
+        choice.from.pageId !== current.pageId ||
+        (choice.from.timelineId !== undefined &&
+          choice.from.timelineId !== current.timelineId))
+    ) {
+      throw new Error(
+        `Choice '${choiceId}' is not available from the current story position.`
+      );
+    }
+
+    if (choice.repeatable !== true && this.state.hasChoice(choice.id)) {
+      throw new Error(`Choice has already been applied: ${choiceId}`);
+    }
+
     // Store the selected choice and where it was made.
     this.state.rememberChoice(choice.id, {
       chapterId: current.chapterId,

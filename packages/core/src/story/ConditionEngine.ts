@@ -138,20 +138,24 @@ export class ConditionEngine {
         return left !== right;
 
       case ">":
-        // Numeric greater-than comparison.
-        return this.toNumber(left) > this.toNumber(right);
-
       case "<":
-        // Numeric less-than comparison.
-        return this.toNumber(left) < this.toNumber(right);
-
       case ">=":
-        // Numeric greater-than-or-equal comparison.
-        return this.toNumber(left) >= this.toNumber(right);
+      case "<=": {
+        const leftNumber = this.toNumber(left);
+        const rightNumber = this.toNumber(right);
 
-      case "<=":
-        // Numeric less-than-or-equal comparison.
-        return this.toNumber(left) <= this.toNumber(right);
+        if (leftNumber === null || rightNumber === null) {
+          console.warn(
+            `Invalid numeric EveryBook condition: ${condition}`
+          );
+          return false;
+        }
+
+        if (operator === ">") return leftNumber > rightNumber;
+        if (operator === "<") return leftNumber < rightNumber;
+        if (operator === ">=") return leftNumber >= rightNumber;
+        return leftNumber <= rightNumber;
+      }
 
       default:
         // This should not normally happen because the regex already validates operators.
@@ -314,11 +318,11 @@ export class ConditionEngine {
    * toNumber("abc");
    * // 0
    */
-  private static toNumber(value: unknown): number {
+  private static toNumber(value: unknown): number | null {
     const numberValue = Number(value);
 
     if (Number.isNaN(numberValue)) {
-      return 0;
+      return null;
     }
 
     return numberValue;
