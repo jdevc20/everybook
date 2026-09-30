@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 
-const SAMPLE_ROOT = "/sample-books/last-lantern";
+const SAMPLE_ROOT = `${import.meta.env.BASE_URL}sample-books/last-lantern`;
 
 const SAMPLE_FILES = [
   "manifest.json",
