@@ -109,10 +109,11 @@ function App() {
         </div>
 
         <label className="upload-card">
-          <span className="upload-title">Open .ebk file</span>
-          <span className="upload-subtitle">
-            Load an EveryBook package from your computer.
+          <span className="upload-copy">
+            <span className="upload-title">Open book</span>
+            <span className="upload-subtitle">Choose an EveryBook .ebk file</span>
           </span>
+          <span className="upload-button">Browse</span>
           <input type="file" accept=".ebk" onChange={handleOpenBook} />
         </label>
 
@@ -170,10 +171,10 @@ function App() {
 
           <div className="reader-actions">
             <button onClick={handlePreviousPage} disabled={!isLoaded}>
-              Previous
+              <span aria-hidden="true">←</span> Previous
             </button>
             <button onClick={handleNextPage} disabled={!isLoaded}>
-              Next
+              Next <span aria-hidden="true">→</span>
             </button>
           </div>
         </div>
@@ -184,12 +185,9 @@ function App() {
           <article className="book-page">
             {!isLoaded && (
               <div className="empty-book">
-                <div className="empty-icon">📖</div>
-                <h2>Open an EveryBook file</h2>
-                <p>
-                  Your interactive story will appear here in a portrait book
-                  layout.
-                </p>
+                <div className="empty-icon" aria-hidden="true">EB</div>
+                <h2>Your reading space</h2>
+                <p>Open an EveryBook file to begin reading.</p>
               </div>
             )}
 
@@ -213,13 +211,15 @@ function App() {
             <strong>{position?.timelineId ?? "main"}</strong>
           </div>
 
-          <button onClick={handleShowPosition} disabled={!isLoaded}>
-            Show State
-          </button>
+          <div className="bottom-actions">
+            <button onClick={handleShowPosition} disabled={!isLoaded}>
+              Show state
+            </button>
 
-          <button onClick={handleClearProgress} disabled={!isLoaded}>
-            Clear Progress
-          </button>
+            <button className="secondary" onClick={handleClearProgress} disabled={!isLoaded}>
+              Clear progress
+            </button>
+          </div>
         </div>
       </section>
     </main>

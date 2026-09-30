@@ -1,73 +1,42 @@
-# React + TypeScript + Vite
+# React EveryBook reader
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React 19 + TypeScript + Vite 8 example that embeds the local `@everybook/core` package.
 
-Currently, two official plugins are available:
+## Run
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+From the `EveryBook/everybook` workspace root:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```powershell
+pnpm install
+pnpm --filter @everybook/core build
+pnpm --filter react-reader dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open the URL printed by Vite and choose a ZIP-based `.ebk` file. See the [format guide](../../docs/EBK_FORMAT.md) for a complete example. Core build prerequisites and known issues are in the [API notes](../../docs/CORE_API.md).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Features
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- Local `.ebk` selection.
+- Chapter/page contents navigation with active-page highlighting.
+- Previous/next controls and current-position display.
+- Progress restoration through Core and a clear-progress control.
+- Book content and story notes rendered by Core inside a Shadow DOM.
+
+`src/App.tsx` owns the renderer instance and React UI state. `src/App.css` and `src/index.css` provide app styling. There is no backend or upload endpoint.
+
+## Behavior to know
+
+The display title comes from the filename. Progress is keyed by filename and manifest book ID. The UI synchronizes position after toolbar/contents navigation, but does not subscribe to in-book actions, so its labels can lag behind the actual page. Clear Progress removes the saved state; reopen immediately before taking further actions to start fresh. File-opening errors have no dedicated error UI.
+
+The Windows Writer's current `.ebk` export is plain JSON and cannot be loaded by this reader.
+
+## Checks
+
+From the workspace root:
+
+```powershell
+pnpm --filter react-reader build
+pnpm --filter react-reader lint
 ```
+
+No reader test script is configured. Browser behavior was not smoke-tested during the 2026-09-17 documentation review.
