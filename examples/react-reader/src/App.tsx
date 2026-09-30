@@ -1,40 +1,27 @@
 import { useRef, useState } from "react";
 import { EveryBookRenderer } from "@everybook/core";
-import type { EveryBookChapter, EveryBookPosition } from "@everybook/core";
+import type {
+  EveryBookChapter,
+  EveryBookPage,
+  EveryBookPosition,
+  EveryBookStoryState,
+} from "@everybook/core";
+import { createSampleEveryBookFile } from "./sampleBook";
 import "./App.css";
 
 function App() {
   const readerRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<EveryBookRenderer | null>(null);
+  const observerRef = useRef<MutationObserver | null>(null);
 
-  const [bookTitle, setBookTitle] = useState<string>("No book loaded");
-  const [fileName, setFileName] = useState<string>("");
+  const [bookTitle, setBookTitle] = useState("No book loaded");
+  const [fileName, setFileName] = useState("");
   const [position, setPosition] = useState<EveryBookPosition | null>(null);
+  const [storyState, setStoryState] = useState<EveryBookStoryState | null>(null);
   const [toc, setToc] = useState<EveryBookChapter[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
-
-  async function handleOpenBook(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
-    if (!file || !readerRef.current) {
-      return;
-    }
-
-    const renderer = new EveryBookRenderer({
-      container: readerRef.current,
-      storageKey: `everybook:${file.name}`,
-    });
-
-    rendererRef.current = renderer;
-
-    await renderer.open(file);
-
-    setBookTitle(file.name.replace(".ebk", ""));
-    setFileName(file.name);
-    setToc(renderer.getTableOfContents());
-    setPosition(renderer.getCurrentPosition());
-    setIsLoaded(true);
-  }
+  const [isOpeningSample, setIsOpeningSample] = useState(false);
+  const [error, setError] = useState("");
 
   function syncReaderState() {
     const renderer = rendererRef.current;
@@ -42,7 +29,75 @@ function App() {
     if (!renderer) return;
 
     setPosition(renderer.getCurrentPosition());
+    setStoryState(renderer.getStoryState());
     setToc(renderer.getTableOfContents());
+
+    const manifest = renderer.getEngine().getManifest();
+    if (manifest) {
+      setBookTitle(manifest.title);
+    }
+  }
+
+  function observeRenderer(renderer: EveryBookRenderer) {
+    observerRef.current?.disconnect();
+
+    const shadowRoot = readerRef.current?.shadowRoot;
+    if (!shadowRoot) return;
+
+    const observer = new MutationObserver(() => {
+      syncReaderState();
+    });
+
+    observer.observe(shadowRoot, {
+      childList: true,
+      subtree: true,
+    });
+
+    observerRef.current = observer;
+    rendererRef.current = renderer;
+  }
+
+  async function loadBook(file: File) {
+    if (!readerRef.current) return;
+
+    setError("");
+
+    try {
+      const renderer = new EveryBookRenderer({
+        container: readerRef.current,
+        storageKey: `everybook:${file.name}`,
+      });
+
+      rendererRef.current = renderer;
+      await renderer.open(file);
+
+      setFileName(file.name);
+      setIsLoaded(true);
+      syncReaderState();
+      observeRenderer(renderer);
+    } catch (caught) {
+      const message =
+        caught instanceof Error ? caught.message : "Unable to open this EveryBook.";
+      setError(message);
+      setIsLoaded(false);
+    }
+  }
+
+  async function handleOpenBook(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file) {
+      await loadBook(file);
+    }
+  }
+
+  async function handleOpenSample() {
+    setIsOpeningSample(true);
+
+    try {
+      await loadBook(await createSampleEveryBookFile());
+    } finally {
+      setIsOpeningSample(false);
+    }
   }
 
   async function handleNextPage() {
@@ -56,46 +111,119 @@ function App() {
   }
 
   async function handleGoToPage(chapterId: string, pageId: string) {
+    if (!isPageAccessible(chapterId, pageId)) return;
+
     await rendererRef.current?.goToPage(chapterId, pageId);
     syncReaderState();
   }
 
   function handleClearProgress() {
     rendererRef.current?.clearProgress();
-    alert("Progress cleared. Reopen the book to start fresh.");
+    alert("Saved progress cleared. Reopen the book to begin a new run.");
   }
 
-  function handleShowPosition() {
-    const current = rendererRef.current?.getCurrentPosition();
-
-    if (!current) {
-      alert("No page loaded.");
+  function handleShowState() {
+    if (!storyState) {
+      alert("This book has no active story state.");
       return;
     }
 
-    alert(
-      `Current Position:\nChapter: ${current.chapterId}\nPage: ${current.pageId}\nTimeline: ${
-        current.timelineId ?? "none"
-      }`
-    );
+    alert(JSON.stringify(storyState, null, 2));
+  }
+
+  function getCurrentPage(): EveryBookPage | null {
+    if (!position) return null;
+
+    const chapter = toc.find((item) => item.id === position.chapterId);
+    return chapter?.pages.find((item) => item.id === position.pageId) ?? null;
   }
 
   function getCurrentChapterTitle() {
     if (!position) return "No chapter";
-
-    const chapter = toc.find((item) => item.id === position.chapterId);
-
-    return chapter?.title ?? position.chapterId;
+    return toc.find((item) => item.id === position.chapterId)?.title ?? position.chapterId;
   }
 
   function getCurrentPageTitle() {
-    if (!position) return "No page";
-
-    const chapter = toc.find((item) => item.id === position.chapterId);
-    const page = chapter?.pages.find((item) => item.id === position.pageId);
-
-    return page?.title ?? position.pageId;
+    const page = getCurrentPage();
+    return page?.title ?? position?.pageId ?? "No page";
   }
+
+  function isStoryStrict() {
+    return (
+      rendererRef.current?.getEngine().getManifest()?.navigation?.jumpMode ===
+      "storyStrict"
+    );
+  }
+
+  function pageKey(chapterId: string, pageId: string) {
+    return `${chapterId}:${pageId}`;
+  }
+
+  function isPageAccessible(chapterId: string, pageId: string) {
+    if (!isStoryStrict() || !storyState) return true;
+
+    const key = pageKey(chapterId, pageId);
+
+    return (
+      storyState.visitedPages.includes(key) ||
+      storyState.unlockedPages?.includes(key) === true ||
+      (position?.chapterId === chapterId && position?.pageId === pageId)
+    );
+  }
+
+  function getSequentialTarget(direction: "next" | "previous") {
+    if (!position) return null;
+
+    const chapterIndex = toc.findIndex((chapter) => chapter.id === position.chapterId);
+    if (chapterIndex < 0) return null;
+
+    const chapter = toc[chapterIndex];
+    const pageIndex = chapter.pages.findIndex((page) => page.id === position.pageId);
+    if (pageIndex < 0) return null;
+
+    if (direction === "next") {
+      const nextPage = chapter.pages[pageIndex + 1];
+      if (nextPage) return { chapterId: chapter.id, pageId: nextPage.id };
+
+      const nextChapter = toc[chapterIndex + 1];
+      if (nextChapter?.pages[0]) {
+        return { chapterId: nextChapter.id, pageId: nextChapter.pages[0].id };
+      }
+
+      return null;
+    }
+
+    const previousPage = chapter.pages[pageIndex - 1];
+    if (previousPage) return { chapterId: chapter.id, pageId: previousPage.id };
+
+    const previousChapter = toc[chapterIndex - 1];
+    const lastPage = previousChapter?.pages.length
+      ? previousChapter.pages[previousChapter.pages.length - 1]
+      : undefined;
+
+    return lastPage
+      ? { chapterId: previousChapter.id, pageId: lastPage.id }
+      : null;
+  }
+
+  const currentPage = getCurrentPage();
+  const pageMode = currentPage?.mode ?? "linear";
+  const nextTarget = getSequentialTarget("next");
+  const previousTarget = getSequentialTarget("previous");
+
+  const showNext =
+    isLoaded &&
+    pageMode !== "choice" &&
+    Boolean(nextTarget) &&
+    Boolean(nextTarget && isPageAccessible(nextTarget.chapterId, nextTarget.pageId));
+
+  const showPrevious =
+    isLoaded &&
+    Boolean(previousTarget) &&
+    Boolean(
+      previousTarget &&
+        isPageAccessible(previousTarget.chapterId, previousTarget.pageId)
+    );
 
   return (
     <main className="reader-app">
@@ -104,22 +232,39 @@ function App() {
           <div className="brand-mark">EB</div>
           <div>
             <h1>EveryBook</h1>
-            <p>Interactive Reader</p>
+            <p>Simple Interactive Reader</p>
           </div>
         </div>
 
+        <button
+          className="sample-button"
+          onClick={handleOpenSample}
+          disabled={isOpeningSample}
+        >
+          {isOpeningSample ? "Opening sample…" : "Read “The Last Lantern”"}
+        </button>
+
         <label className="upload-card">
-          <span className="upload-title">Open .ebk file</span>
+          <span className="upload-title">Or open an .ebk file</span>
           <span className="upload-subtitle">
-            Load an EveryBook package from your computer.
+            Load a local EveryBook package from your computer.
           </span>
           <input type="file" accept=".ebk" onChange={handleOpenBook} />
         </label>
 
+        {error && <p className="error-card">{error}</p>}
+
         <section className="book-info-card">
           <p className="eyebrow">Current Book</p>
           <h2>{bookTitle}</h2>
-          <p>{fileName || "Select an .ebk file to begin reading."}</p>
+          <p>{fileName || "Choose the sample or open your own book."}</p>
+
+          {isLoaded && (
+            <div className="book-badges">
+              <span>{isStoryStrict() ? "storyStrict" : "open navigation"}</span>
+              <span>{pageMode} page</span>
+            </div>
+          )}
         </section>
 
         <section className="toc-card">
@@ -141,14 +286,27 @@ function App() {
                       const isActive =
                         position?.chapterId === chapter.id &&
                         position?.pageId === page.id;
+                      const accessible = isPageAccessible(chapter.id, page.id);
 
                       return (
                         <button
                           key={page.id}
-                          className={isActive ? "toc-page active" : "toc-page"}
+                          className={[
+                            "toc-page",
+                            isActive ? "active" : "",
+                            !accessible ? "locked" : "",
+                          ].join(" ")}
+                          disabled={!accessible}
                           onClick={() => handleGoToPage(chapter.id, page.id)}
                         >
-                          {page.title ?? page.id}
+                          <span>{page.title ?? page.id}</span>
+                          <small>
+                            {isActive
+                              ? "Now reading"
+                              : accessible
+                                ? page.mode ?? "linear"
+                                : "Locked"}
+                          </small>
                         </button>
                       );
                     })}
@@ -169,12 +327,19 @@ function App() {
           </div>
 
           <div className="reader-actions">
-            <button onClick={handlePreviousPage} disabled={!isLoaded}>
-              Previous
-            </button>
-            <button onClick={handleNextPage} disabled={!isLoaded}>
-              Next
-            </button>
+            {showPrevious && (
+              <button onClick={handlePreviousPage}>Previous</button>
+            )}
+
+            {showNext && <button onClick={handleNextPage}>Next</button>}
+
+            {isLoaded && pageMode === "choice" && (
+              <span className="choice-hint">Choose an option on the page</span>
+            )}
+
+            {isLoaded && pageMode === "mixed" && !showNext && (
+              <span className="choice-hint">Continue using a story action</span>
+            )}
           </div>
         </div>
 
@@ -185,10 +350,10 @@ function App() {
             {!isLoaded && (
               <div className="empty-book">
                 <div className="empty-icon">📖</div>
-                <h2>Open an EveryBook file</h2>
+                <h2>Start with the sample story</h2>
                 <p>
-                  Your interactive story will appear here in a portrait book
-                  layout.
+                  It demonstrates storyStrict navigation, choices, variables,
+                  conditions, locked pages, and multiple endings.
                 </p>
               </div>
             )}
@@ -209,16 +374,16 @@ function App() {
           </div>
 
           <div className="position-pill">
-            <span>Timeline</span>
-            <strong>{position?.timelineId ?? "main"}</strong>
+            <span>Mode</span>
+            <strong>{pageMode}</strong>
           </div>
 
-          <button onClick={handleShowPosition} disabled={!isLoaded}>
-            Show State
+          <button onClick={handleShowState} disabled={!storyState}>
+            Story State
           </button>
 
           <button onClick={handleClearProgress} disabled={!isLoaded}>
-            Clear Progress
+            Clear Saved Progress
           </button>
         </div>
       </section>

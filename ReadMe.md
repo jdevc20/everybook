@@ -174,6 +174,39 @@ my-book/pages/start.html
 
 ---
 
+## Included Sample Story
+
+The React reader includes a small built-in story called **The Last Lantern**.
+
+It is designed as a reference book for the current EveryBook engine and demonstrates:
+
+- `storyStrict` navigation
+- page modes: `choice`, `mixed`, and `linear`
+- story choices and branching paths
+- `setVariable`
+- `setVariable` and `incrementVariable` choice effects
+- conditional HTML with `data-ebk-if`
+- condition-based choices
+- visited and unlocked pages
+- multiple endings
+- local progress persistence
+
+Run the reader and select **Read “The Last Lantern”** to package the sample source into an `.ebk` in the browser and open it through the normal `EveryBookRenderer.open()` flow.
+
+Sample source:
+
+```text
+examples/react-reader/public/sample-books/last-lantern/
+├─ manifest.json
+├─ story/story.json
+├─ pages/
+└─ styles/book.css
+```
+
+The reader also adapts its controls to the current page mode. Choice pages prioritize in-story buttons, mixed pages allow story actions plus sequential navigation only when the target is accessible, and locked `storyStrict` pages are disabled in the table of contents.
+
+---
+
 ## Setup
 
 Requirements:
