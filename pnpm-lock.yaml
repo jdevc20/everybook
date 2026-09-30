@@ -20,6 +20,9 @@ importers:
       '@everybook/core':
         specifier: workspace:*
         version: link:../../packages/core
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       react:
         specifier: ^19.2.5
         version: 19.2.6

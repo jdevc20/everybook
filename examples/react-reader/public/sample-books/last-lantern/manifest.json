@@ -1,0 +1,80 @@
+{
+  "id": "the-last-lantern",
+  "format": "everybook",
+  "version": "0.1.0",
+  "title": "The Last Lantern",
+  "author": "EveryBook Sample",
+  "description": "A short branching story demonstrating storyStrict navigation and core EveryBook actions.",
+  "entry": {
+    "chapterId": "night-road",
+    "pageId": "awakening"
+  },
+  "story": "story/story.json",
+  "styles": [
+    "styles/book.css"
+  ],
+  "chapters": [
+    {
+      "id": "night-road",
+      "title": "The Night Road",
+      "pages": [
+        {
+          "id": "awakening",
+          "title": "The Lantern",
+          "src": "pages/awakening.html",
+          "mode": "choice"
+        },
+        {
+          "id": "crossroads",
+          "title": "The Crossroads",
+          "src": "pages/crossroads.html",
+          "mode": "choice"
+        },
+        {
+          "id": "forest",
+          "title": "Whispering Forest",
+          "src": "pages/forest.html",
+          "mode": "mixed"
+        },
+        {
+          "id": "bridge",
+          "title": "Old Stone Bridge",
+          "src": "pages/bridge.html",
+          "mode": "mixed"
+        }
+      ]
+    },
+    {
+      "id": "tower",
+      "title": "The Bell Tower",
+      "pages": [
+        {
+          "id": "tower-door",
+          "title": "The Tower Door",
+          "src": "pages/tower.html",
+          "mode": "choice"
+        },
+        {
+          "id": "brave-ending",
+          "title": "The Bell of Dawn",
+          "src": "pages/brave-ending.html",
+          "mode": "linear"
+        },
+        {
+          "id": "kind-ending",
+          "title": "The Road Home",
+          "src": "pages/kind-ending.html",
+          "mode": "linear"
+        }
+      ]
+    }
+  ],
+  "navigation": {
+    "jumpMode": "storyStrict",
+    "allowBacktracking": true
+  },
+  "permissions": {
+    "network": false,
+    "storage": true
+  }
+}

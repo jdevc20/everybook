@@ -1,0 +1,33 @@
+.story-page {
+  max-width: 42rem;
+  margin: 0 auto;
+  font-family: Georgia, "Times New Roman", serif;
+}
+.story-page .kicker {
+  font-family: system-ui, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  font-size: .72rem;
+  font-weight: 800;
+  opacity: .62;
+}
+.story-page h1 {
+  margin-top: .35rem;
+}
+.story-page button {
+  display: inline-flex;
+  margin: .45rem .45rem .45rem 0;
+  border: 0;
+  border-radius: 999px;
+  padding: .8rem 1rem;
+  cursor: pointer;
+}
+.choice-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+.ending-page {
+  text-align: center;
+  padding-top: 2rem;
+}

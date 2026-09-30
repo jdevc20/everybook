@@ -1,0 +1,151 @@
+{
+  "version": "0.1.0",
+  "start": {
+    "chapterId": "night-road",
+    "pageId": "awakening"
+  },
+  "mainTimeline": "main",
+  "timelines": [
+    {
+      "id": "main",
+      "title": "The Last Lantern"
+    }
+  ],
+  "variables": {
+    "hasLantern": false,
+    "courage": 0,
+    "helpedTraveler": false,
+    "foundFeather": false
+  },
+  "choices": [
+    {
+      "id": "light-lantern",
+      "label": "Light the lantern",
+      "from": {
+        "chapterId": "night-road",
+        "pageId": "awakening"
+      },
+      "effects": [
+        {
+          "type": "setVariable",
+          "key": "hasLantern",
+          "value": true
+        }
+      ],
+      "goTo": {
+        "chapterId": "night-road",
+        "pageId": "crossroads"
+      }
+    },
+    {
+      "id": "take-forest",
+      "label": "Take the forest trail",
+      "from": {
+        "chapterId": "night-road",
+        "pageId": "crossroads"
+      },
+      "effects": [
+        {
+          "type": "incrementVariable",
+          "key": "courage",
+          "value": 1
+        }
+      ],
+      "goTo": {
+        "chapterId": "night-road",
+        "pageId": "forest"
+      }
+    },
+    {
+      "id": "take-bridge",
+      "label": "Cross the old bridge",
+      "from": {
+        "chapterId": "night-road",
+        "pageId": "crossroads"
+      },
+      "effects": [
+        {
+          "type": "setVariable",
+          "key": "helpedTraveler",
+          "value": true
+        }
+      ],
+      "goTo": {
+        "chapterId": "night-road",
+        "pageId": "bridge"
+      }
+    },
+    {
+      "id": "forest-to-tower",
+      "label": "Follow the light to the tower",
+      "from": {
+        "chapterId": "night-road",
+        "pageId": "forest"
+      },
+      "condition": "hasLantern",
+      "goTo": {
+        "chapterId": "tower",
+        "pageId": "tower-door"
+      }
+    },
+    {
+      "id": "bridge-to-tower",
+      "label": "Walk with the traveler to the tower",
+      "from": {
+        "chapterId": "night-road",
+        "pageId": "bridge"
+      },
+      "condition": "helpedTraveler",
+      "goTo": {
+        "chapterId": "tower",
+        "pageId": "tower-door"
+      }
+    },
+    {
+      "id": "ring-bell",
+      "label": "Climb the stairs and ring the bell",
+      "from": {
+        "chapterId": "tower",
+        "pageId": "tower-door"
+      },
+      "condition": "courage >= 1",
+      "goTo": {
+        "chapterId": "tower",
+        "pageId": "brave-ending"
+      }
+    },
+    {
+      "id": "guide-traveler",
+      "label": "Give the lantern to the traveler",
+      "from": {
+        "chapterId": "tower",
+        "pageId": "tower-door"
+      },
+      "condition": "helpedTraveler",
+      "goTo": {
+        "chapterId": "tower",
+        "pageId": "kind-ending"
+      }
+    }
+  ],
+  "endings": [
+    {
+      "id": "dawn",
+      "title": "The Bell of Dawn",
+      "condition": "courage >= 1",
+      "page": {
+        "chapterId": "tower",
+        "pageId": "brave-ending"
+      }
+    },
+    {
+      "id": "home",
+      "title": "The Road Home",
+      "condition": "helpedTraveler",
+      "page": {
+        "chapterId": "tower",
+        "pageId": "kind-ending"
+      }
+    }
+  ]
+}
