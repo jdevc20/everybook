@@ -3,7 +3,9 @@
   <h1>Whispering Forest</h1>
   <p>The trees bend over the trail. Your lantern flickers, but you keep walking.</p>
   <p data-ebk-if="courage >= 1">You feel braver than when the journey began.</p>
-  <button data-ebk-action="setVariable" data-key="foundFeather" data-value="true">Pick up the silver feather</button>
-  <p data-ebk-if="foundFeather">The feather shines softly in your hand.</p>
+  <div data-ebk-if="!foundFeather">
+    <p>A silver feather glints beneath an old tree.</p>
+    <button data-ebk-action="setVariable" data-key="foundFeather" data-value="true">Pick up the silver feather</button>
+  </div>
   <button data-ebk-action="choice" data-choice-id="forest-to-tower">Follow the light to the tower</button>
 </section>
