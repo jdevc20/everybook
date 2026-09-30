@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsup ./src/index.ts --format esm,cjs --dts --tsconfig tsconfig.json",
     "dev": "tsup ./src/index.ts --format esm,cjs --dts --watch --tsconfig tsconfig.json",
-    "test": "vitest run"
+    "test": "pnpm build && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "dompurify": "^3.0.0",
@@ -19,7 +19,6 @@
   },
   "devDependencies": {
     "tsup": "^8.0.0",
-    "typescript": "^5.0.0",
-    "vitest": "^3.2.4"
+    "typescript": "^5.0.0"
   }
 }
