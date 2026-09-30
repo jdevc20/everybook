@@ -22,6 +22,7 @@ function App() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isOpeningSample, setIsOpeningSample] = useState(false);
   const [error, setError] = useState("");
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
 
   function syncReaderState() {
     const renderer = rendererRef.current;
@@ -73,6 +74,7 @@ function App() {
 
       setFileName(file.name);
       setIsLoaded(true);
+      setIsLibraryOpen(false);
       syncReaderState();
       observeRenderer(renderer);
     } catch (caught) {
@@ -114,6 +116,7 @@ function App() {
     if (!isPageAccessible(chapterId, pageId)) return;
 
     await rendererRef.current?.goToPage(chapterId, pageId);
+    setIsLibraryOpen(false);
     syncReaderState();
   }
 
@@ -227,13 +230,29 @@ function App() {
 
   return (
     <main className="reader-app">
-      <aside className="library-panel">
-        <div className="brand">
-          <div className="brand-mark">EB</div>
-          <div>
-            <h1>EveryBook</h1>
-            <p>Simple Interactive Reader</p>
+      <button
+        className={isLibraryOpen ? "mobile-overlay visible" : "mobile-overlay"}
+        aria-label="Close library"
+        onClick={() => setIsLibraryOpen(false)}
+      />
+
+      <aside className={isLibraryOpen ? "library-panel open" : "library-panel"}>
+        <div className="brand-row">
+          <div className="brand">
+            <div className="brand-mark">EB</div>
+            <div>
+              <h1>EveryBook</h1>
+              <p>Interactive Reader</p>
+            </div>
           </div>
+
+          <button
+            className="sidebar-close"
+            aria-label="Close library"
+            onClick={() => setIsLibraryOpen(false)}
+          >
+            ×
+          </button>
         </div>
 
         <button
@@ -320,10 +339,19 @@ function App() {
 
       <section className="reading-stage">
         <div className="top-reader-bar">
-          <div>
+          <div className="reader-heading">
+            <button
+              className="mobile-library-button"
+              onClick={() => setIsLibraryOpen(true)}
+            >
+              Library
+            </button>
+
+            <div>
             <p className="eyebrow">Now Reading</p>
             <h2>{getCurrentChapterTitle()}</h2>
-            <p>{getCurrentPageTitle()}</p>
+              <p>{getCurrentPageTitle()}</p>
+            </div>
           </div>
 
           <div className="reader-actions">
@@ -362,7 +390,7 @@ function App() {
           </article>
         </div>
 
-        <div className="bottom-reader-bar">
+        <div className="bottom-reader-bar" aria-label="Reader status and actions">
           <div className="position-pill">
             <span>Chapter</span>
             <strong>{position?.chapterId ?? "—"}</strong>
